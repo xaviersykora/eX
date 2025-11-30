@@ -1,0 +1,88 @@
+.window-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  -webkit-app-region: no-drag;
+  margin-left: auto;
+}
+
+.window-control {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 100%;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.window-control:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.window-control-close:hover {
+  background-color: #e81123;
+  color: white;
+}
+
+/* Classic style - simple, flat design */
+.window-controls-classic .window-control {
+  background-color: transparent;
+}
+
+.window-controls-classic .window-control:hover {
+  background-color: var(--bg-hover);
+}
+
+.window-controls-classic .window-control-close:hover {
+  background-color: #e81123;
+}
+
+/* Glass style - softer, translucent design */
+.window-controls-glass .window-control {
+  background-color: transparent;
+  border-radius: 0;
+  position: relative;
+}
+
+.window-controls-glass .window-control::before {
+  content: '';
+  position: absolute;
+  inset: 6px 8px;
+  border-radius: 6px;
+  background-color: transparent;
+  transition: all var(--transition-fast);
+}
+
+.window-controls-glass .window-control:hover::before {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.window-controls-glass .window-control:hover {
+  background-color: transparent;
+  color: var(--text-primary);
+}
+
+.window-controls-glass .window-control-close:hover::before {
+  background-color: rgba(232, 17, 35, 0.8);
+}
+
+.window-controls-glass .window-control-close:hover {
+  background-color: transparent;
+  color: white;
+}
+
+/* Glass style SVG icons have softer appearance */
+.window-controls-glass .window-control svg {
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.3));
+}
+
+/* Active/pressed state */
+.window-control:active {
+  opacity: 0.8;
+}
+
+.window-controls-glass .window-control:active::before {
+  transform: scale(0.95);
+}

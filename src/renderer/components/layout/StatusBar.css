@@ -1,0 +1,24 @@
+.statusbar {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 var(--spacing-md);
+  font-size: var(--font-size-xs);
+}
+
+.statusbar-section {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.statusbar-spacer {
+  flex: 1;
+}
+
+.statusbar-separator {
+  width: 1px;
+  height: 14px;
+  background-color: rgba(255, 255, 255, 0.3);
+  margin: 0 var(--spacing-sm);
+}

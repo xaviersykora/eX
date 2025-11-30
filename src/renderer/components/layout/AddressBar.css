@@ -1,0 +1,132 @@
+.addressbar {
+  display: flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 var(--spacing-sm);
+  gap: var(--spacing-sm);
+}
+
+.addressbar-path {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  height: 28px;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--spacing-sm);
+  cursor: text;
+  overflow: hidden;
+}
+
+.addressbar-path:focus-within {
+  border-color: var(--accent-color);
+}
+
+.addressbar-edit-form {
+  flex: 1;
+  display: flex;
+}
+
+.addressbar-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.addressbar-breadcrumbs {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.breadcrumb-item {
+  padding: 2px 4px;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.breadcrumb-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.breadcrumb-home {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.breadcrumb-separator {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  margin: 0 2px;
+}
+
+.addressbar-search {
+  display: flex;
+  align-items: center;
+  width: 200px;
+  height: 28px;
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--spacing-sm);
+}
+
+.addressbar-search:focus-within {
+  border-color: var(--accent-color);
+}
+
+.search-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  margin-right: var(--spacing-xs);
+}
+
+.search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.search-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.search-clear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  padding: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.search-clear:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-hover);
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -1,0 +1,52 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: var(--bg-primary);
+}
+
+.app-titlebar {
+  height: var(--titlebar-height);
+  background-color: var(--titlebar-bg);
+  -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+}
+
+.app-toolbar {
+  height: var(--toolbar-height);
+  background-color: var(--toolbar-bg);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.app-addressbar {
+  height: var(--addressbar-height);
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.app-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.app-main {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-statusbar {
+  height: var(--statusbar-height);
+  background-color: var(--statusbar-bg);
+  color: var(--statusbar-text);
+}
+
+/* Draggable region exclusions */
+.app-titlebar button,
+.app-titlebar input,
+.app-titlebar .tab {
+  -webkit-app-region: no-drag;
+}

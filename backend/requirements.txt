@@ -1,0 +1,18 @@
+# X-Plorer Backend Requirements
+
+# Core dependencies
+pyzmq>=26.0.0
+msgpack>=1.0.0
+pywin32>=306
+pillow>=10.0.0
+cython>=3.0.0
+
+# Development dependencies (optional)
+# pytest>=8.0.0
+# pytest-asyncio>=0.24.0
+# black>=24.0.0
+# mypy>=1.0.0
+
+# Build dependencies (optional)
+# nuitka==2.5.9  # Note: 2.6+ has bugs with PIL and win32
+# pyinstaller>=6.0

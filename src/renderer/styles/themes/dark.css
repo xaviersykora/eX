@@ -1,0 +1,150 @@
+[data-theme='dark'] {
+  /* Background colors */
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252526;
+  --bg-tertiary: #2d2d2d;
+  --bg-elevated: #333333;
+  --bg-hover: #3c3c3c;
+  --bg-active: #444444;
+  --bg-selected: var(--accent-color-alpha, rgba(0, 120, 212, 0.4));
+  --bg-selected-unfocused: #3a3a3a;
+
+  /* Text colors */
+  --text-primary: #cccccc;
+  --text-secondary: #9d9d9d;
+  --text-tertiary: #6e6e6e;
+  --text-disabled: #4d4d4d;
+  --text-inverse: #ffffff;
+
+  /* Border colors */
+  --border-primary: #3c3c3c;
+  --border-secondary: #2d2d2d;
+  --border-focus: #007acc;
+
+  /* Accent color */
+  --accent-color: #0078d4;
+  --accent-color-hover: #1a86d9;
+  --accent-color-active: #0066b5;
+  --accent-color-alpha: rgba(0, 120, 212, 0.15);
+
+  /* Status colors */
+  --color-success: #4caf50;
+  --color-warning: #ff9800;
+  --color-error: #f44336;
+  --color-info: #2196f3;
+
+  /* Input colors */
+  --input-bg: #3c3c3c;
+  --input-border: #5c5c5c;
+  --input-focus-border: #007acc;
+
+  /* Scrollbar */
+  --scrollbar-thumb: #5a5a5a;
+  --scrollbar-thumb-hover: #6a6a6a;
+
+  /* Selection */
+  --selection-bg: #264f78;
+  --selection-text: #ffffff;
+
+  /* File list specific */
+  --row-hover: #2a2d2e;
+  --row-selected: var(--accent-color, #0078d4);
+  --row-selected-unfocused: #37373d;
+  --row-alt: #232323;
+
+  /* Sidebar */
+  --sidebar-bg: #252526;
+  --sidebar-hover: #2a2d2e;
+  --sidebar-selected: #37373d;
+
+  /* Tab bar */
+  --tab-bg: #2d2d2d;
+  --tab-active-bg: #1e1e1e;
+  --tab-hover-bg: #323232;
+  --tab-border: #3c3c3c;
+
+  /* Toolbar */
+  --toolbar-bg: #323232;
+  --toolbar-button-hover: #3c3c3c;
+  --toolbar-button-active: #444444;
+
+  /* Titlebar */
+  --titlebar-bg: #1e1e1e;
+
+  /* Statusbar */
+  --statusbar-bg: #252526;
+  --statusbar-text: #9d9d9d;
+
+  /* Context menu */
+  --menu-bg: #252526;
+  --menu-hover: var(--accent-color-alpha, rgba(0, 120, 212, 0.4));
+  --menu-separator: #3c3c3c;
+
+  /* Dialog */
+  --dialog-bg: #252526;
+  --dialog-overlay: rgba(0, 0, 0, 0.5);
+
+  /* Icons */
+  --icon-color: #cccccc;
+  --icon-color-secondary: #808080;
+}
+
+/* Glass UI Style Overrides */
+[data-theme='dark'][data-ui-style='glass'] {
+  /* Enable blur for glass effect */
+  --glass-blur: 20px;
+  --glass-bg-opacity: 0.65;
+  --glass-border-opacity: 0.15;
+
+  /* Glass background colors - semi-transparent versions */
+  --bg-primary: rgba(20, 20, 22, var(--glass-bg-opacity));
+  --bg-secondary: rgba(30, 30, 35, var(--glass-bg-opacity));
+  --bg-tertiary: rgba(40, 40, 48, var(--glass-bg-opacity));
+  --bg-elevated: rgba(50, 50, 58, var(--glass-bg-opacity));
+  --bg-hover: rgba(60, 60, 70, 0.5);
+  --bg-active: rgba(70, 70, 82, 0.5);
+
+  /* Glass borders - subtle white borders for depth */
+  --border-primary: rgba(255, 255, 255, var(--glass-border-opacity));
+  --border-secondary: rgba(255, 255, 255, 0.08);
+
+  /* Sidebar glass */
+  --sidebar-bg: rgba(25, 25, 30, var(--glass-bg-opacity));
+  --sidebar-hover: rgba(50, 50, 60, 0.5);
+  --sidebar-selected: rgba(60, 60, 72, 0.6);
+
+  /* Tab bar glass */
+  --tab-bg: rgba(35, 35, 42, var(--glass-bg-opacity));
+  --tab-active-bg: rgba(20, 20, 25, var(--glass-bg-opacity));
+  --tab-hover-bg: rgba(45, 45, 55, 0.5);
+  --tab-border: rgba(255, 255, 255, 0.1);
+
+  /* Toolbar glass */
+  --toolbar-bg: rgba(40, 40, 48, var(--glass-bg-opacity));
+  --toolbar-button-hover: rgba(60, 60, 72, 0.5);
+  --toolbar-button-active: rgba(70, 70, 85, 0.5);
+
+  /* Titlebar glass */
+  --titlebar-bg: rgba(18, 18, 22, 0.85);
+
+  /* Statusbar glass */
+  --statusbar-bg: rgba(25, 25, 32, var(--glass-bg-opacity));
+
+  /* Context menu glass */
+  --menu-bg: rgba(30, 30, 38, 0.9);
+
+  /* Dialog glass */
+  --dialog-bg: rgba(30, 30, 38, 0.95);
+
+  /* Row colors glass */
+  --row-hover: rgba(42, 45, 50, 0.5);
+  --row-selected-unfocused: rgba(55, 55, 65, 0.5);
+  --row-alt: rgba(28, 28, 35, 0.3);
+
+  /* Input glass */
+  --input-bg: rgba(50, 50, 60, 0.6);
+
+  /* Scrollbar glass */
+  --scrollbar-thumb: rgba(100, 100, 120, 0.5);
+  --scrollbar-thumb-hover: rgba(120, 120, 140, 0.6);
+}

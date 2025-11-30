@@ -1,0 +1,282 @@
+.sidebar {
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-min-width);
+  max-width: var(--sidebar-max-width);
+  background-color: var(--sidebar-bg);
+  border-right: 1px solid var(--border-primary);
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacing-sm) 0;
+}
+
+.sidebar-section {
+  margin-bottom: var(--spacing-xs);
+  position: relative;
+}
+
+.sidebar-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.sidebar-section-header:hover {
+  background-color: var(--sidebar-hover);
+}
+
+.sidebar-section-header .section-icon {
+  color: var(--icon-color-secondary);
+}
+
+.sidebar-section-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  width: 100%;
+  padding: var(--spacing-sm) var(--spacing-md);
+  padding-left: calc(var(--spacing-md) + 20px);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-item:hover {
+  background-color: var(--sidebar-hover);
+}
+
+.sidebar-item.selected {
+  background-color: var(--sidebar-selected);
+}
+
+.sidebar-item svg {
+  flex-shrink: 0;
+  color: var(--icon-color);
+}
+
+.sidebar-home-button {
+  padding-left: var(--spacing-md);
+  font-weight: 500;
+}
+
+.sidebar-home-button svg {
+  color: var(--accent-color);
+}
+
+.sidebar-divider {
+  height: 1px;
+  background-color: var(--border-primary);
+  margin: var(--spacing-sm) var(--spacing-md);
+}
+
+/* Quick Access Header Group */
+.sidebar-section-header-group {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar-section-header-group:hover {
+  background-color: var(--sidebar-hover);
+}
+
+.sidebar-section-header-group .sidebar-section-header {
+  flex: 1;
+}
+
+.sidebar-section-header-group .sidebar-section-header:hover {
+  background-color: transparent;
+}
+
+.sidebar-config-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  opacity: 0;
+  transition: opacity var(--transition-fast), background-color var(--transition-fast);
+}
+
+.sidebar-section-header-group:hover .sidebar-config-button {
+  opacity: 1;
+}
+
+.sidebar-config-button:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Quick Access Menu */
+.quick-access-menu {
+  position: fixed;
+  width: 300px;
+  background-color: var(--menu-bg);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-dropdown);
+  overflow: hidden;
+}
+
+.quick-access-menu-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.quick-access-menu-header h4 {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.quick-access-menu-header button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+}
+
+.quick-access-menu-header button:hover {
+  background-color: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.quick-access-menu-items {
+  max-height: 300px;
+  overflow-y: auto;
+  padding: var(--spacing-xs);
+}
+
+.quick-access-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+}
+
+.quick-access-menu-item:hover {
+  background-color: var(--bg-hover);
+}
+
+.quick-access-menu-item .drag-handle {
+  color: var(--text-tertiary);
+  cursor: grab;
+}
+
+.quick-access-menu-item.dragging {
+  opacity: 0.5;
+}
+
+.quick-access-menu-item.drag-over {
+  background-color: var(--accent-color-alpha);
+  border-top: 2px solid var(--accent-color);
+}
+
+.quick-access-menu-item .item-name {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-access-menu-item .visibility-toggle,
+.quick-access-menu-item .remove-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+}
+
+.quick-access-menu-item .visibility-toggle:hover,
+.quick-access-menu-item .remove-button:hover {
+  background-color: var(--bg-active);
+  color: var(--text-primary);
+}
+
+.quick-access-menu-add {
+  display: flex;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-sm);
+  border-top: 1px solid var(--border-primary);
+}
+
+.quick-access-menu-add input {
+  flex: 1;
+  padding: var(--spacing-sm);
+  background-color: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.quick-access-menu-add input:focus {
+  border-color: var(--accent-color);
+}
+
+.quick-access-menu-add input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.quick-access-menu-add button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background-color: var(--accent-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-inverse);
+}
+
+.quick-access-menu-add button:hover {
+  background-color: var(--accent-color-hover);
+}
+
+/* Drop target state for sidebar items */
+.sidebar-item.drop-target {
+  background-color: var(--accent-color-alpha);
+  outline: 1px dashed var(--accent-color);
+  outline-offset: -1px;
+}
+
+/* Empty custom section message */
+.sidebar-empty-section {
+  padding: var(--spacing-sm) var(--spacing-md);
+  padding-left: calc(var(--spacing-md) + 20px);
+  font-size: var(--font-size-xs);
+  color: var(--text-tertiary);
+  font-style: italic;
+}
