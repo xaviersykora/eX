@@ -24,13 +24,13 @@ def get_exe_path() -> str:
 class RegistryService:
     """Service for Windows Registry operations."""
 
-    APP_NAME = "X-Plorer"
-    PROG_ID = "XPlorer.Folder"
+    APP_NAME = "eX"
+    PROG_ID = "eX.Folder"
 
     @classmethod
     def register_shell_integration(cls) -> dict[str, Any]:
         """
-        Register X-Plorer as a folder handler in Windows.
+        Register eX as a folder handler in Windows.
         Adds context menu entries and file associations.
 
         Returns:

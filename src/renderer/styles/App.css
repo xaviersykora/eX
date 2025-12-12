@@ -8,7 +8,7 @@
 .app-titlebar {
   height: var(--titlebar-height);
   background-color: var(--titlebar-bg);
-  -webkit-app-region: drag;
+  /* Custom drag handling in TabBar.tsx - no native drag */
   display: flex;
   align-items: center;
 }
@@ -44,9 +44,4 @@
   color: var(--statusbar-text);
 }
 
-/* Draggable region exclusions */
-.app-titlebar button,
-.app-titlebar input,
-.app-titlebar .tab {
-  -webkit-app-region: no-drag;
-}
+/* Custom drag handling is done in TabBar.tsx */

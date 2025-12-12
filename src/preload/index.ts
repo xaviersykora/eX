@@ -62,10 +62,45 @@ contextBridge.exposeInMainWorld('xplorer', {
     // Show/hide drop indicator on target window
     showDropIndicator: (targetWindowId: string, show: boolean): void =>
       ipcRenderer.send('window:showDropIndicator', targetWindowId, show),
+    // Check if window is maximized
+    isMaximized: (): Promise<boolean> => ipcRenderer.invoke('window:isMaximized'),
+    // Unmaximize and reposition for drag
+    dragUnmaximize: (mouseX: number, mouseY: number): Promise<{ x: number; y: number; width: number; height: number } | null> =>
+      ipcRenderer.invoke('window:dragUnmaximize', mouseX, mouseY),
+    // Listen for maximize state changes
+    onMaximizeChange: (callback: (isMaximized: boolean) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, isMaximized: boolean) => callback(isMaximized);
+      ipcRenderer.on('window:maximizeChange', handler);
+      return () => ipcRenderer.removeListener('window:maximizeChange', handler);
+    },
+    // Get window position
+    getPosition: (): Promise<{ x: number; y: number } | null> => ipcRenderer.invoke('window:getPosition'),
+    // Set window position
+    setPosition: (x: number, y: number): void => ipcRenderer.send('window:setPosition', x, y),
+    // Get window bounds (position and size)
+    getBoundsLocal: (): Promise<{ x: number; y: number; width: number; height: number } | null> =>
+      ipcRenderer.invoke('window:getBoundsLocal'),
+    // Set window bounds (position and size)
+    setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }): void =>
+      ipcRenderer.send('window:setBounds', bounds),
+    // Get minimum window size
+    getMinimumSize: (): Promise<{ width: number; height: number }> => ipcRenderer.invoke('window:getMinimumSize'),
   },
 
   // Tab operations from other windows
   tabs: {
+    // Tab state actions
+    create: (path?: string): void => ipcRenderer.send('tabs:create', path),
+    close: (id: string): void => ipcRenderer.send('tabs:close', id),
+    setActive: (id: string): void => ipcRenderer.send('tabs:setActive', id),
+    navigateTo: (path: string): void => ipcRenderer.send('tabs:navigateTo', path),
+    goBack: (): void => ipcRenderer.send('tabs:goBack'),
+    goForward: (): void => ipcRenderer.send('tabs:goForward'),
+    // Tab transfer methods (for inter-window drag and drop)
+    addTab: (tab: TabData): void => ipcRenderer.send('tabs:addTab', tab),
+    removeTab: (id: string): void => ipcRenderer.send('tabs:removeTab', id),
+    transferTab: (tabId: string, targetWindowId: string): void => ipcRenderer.send('tabs:transferTab', tabId, targetWindowId),
+    getTab: (id: string): Promise<TabData | null> => ipcRenderer.invoke('tabs:getTab', id),
     // Listen for tab data when window is created with a tab
     onInitWithData: (callback: (tabData: TabData) => void): (() => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: TabData) => callback(data);
@@ -86,6 +121,26 @@ contextBridge.exposeInMainWorld('xplorer', {
     },
   },
 
+  // Drag preview overlay (visible outside window bounds)
+  dragPreview: {
+    show: (title: string, x: number, y: number): void => ipcRenderer.send('dragPreview:show', title, x, y),
+    update: (x: number, y: number): void => ipcRenderer.send('dragPreview:update', x, y),
+    hide: (): void => ipcRenderer.send('dragPreview:hide'),
+  },
+
+  // State subscriptions
+  state: {
+    // Subscribe to tab state changes from main process
+    onTabsChange: (callback: (state: { tabs: TabData[]; activeTabId: string | null }) => void): (() => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: { tabs: TabData[]; activeTabId: string | null }) => callback(state);
+      ipcRenderer.on('state:update:tabs', handler);
+      return () => ipcRenderer.removeListener('state:update:tabs', handler);
+    },
+    // Get current tab state
+    getTabState: (): Promise<{ tabs: TabData[]; activeTabId: string | null }> =>
+      ipcRenderer.invoke('tabs:getState'),
+  },
+
   // Platform info
   platform: process.platform,
 
@@ -104,6 +159,9 @@ contextBridge.exposeInMainWorld('xplorer', {
     },
     setTrayRestoreBehavior: (behavior: 'restore' | 'newWindow'): void => {
       ipcRenderer.send('settings:trayRestoreBehavior', behavior);
+    },
+    setStartOnLogin: (enabled: boolean): void => {
+      ipcRenderer.send('settings:startOnLogin', enabled);
     },
   },
 });
@@ -128,11 +186,38 @@ declare global {
         transferTab: (targetWindowId: string, tabData: TabData) => void;
         focus: (windowId: string) => void;
         showDropIndicator: (targetWindowId: string, show: boolean) => void;
+        isMaximized: () => Promise<boolean>;
+        dragUnmaximize: (mouseX: number, mouseY: number) => Promise<{ x: number; y: number; width: number; height: number } | null>;
+        onMaximizeChange: (callback: (isMaximized: boolean) => void) => () => void;
+        getPosition: () => Promise<{ x: number; y: number } | null>;
+        setPosition: (x: number, y: number) => void;
+        getBoundsLocal: () => Promise<{ x: number; y: number; width: number; height: number } | null>;
+        setBounds: (bounds: { x?: number; y?: number; width?: number; height?: number }) => void;
+        getMinimumSize: () => Promise<{ width: number; height: number }>;
       };
       tabs: {
+        create: (path?: string) => void;
+        close: (id: string) => void;
+        setActive: (id: string) => void;
+        navigateTo: (path: string) => void;
+        goBack: () => void;
+        goForward: () => void;
+        addTab: (tab: TabData) => void;
+        removeTab: (id: string) => void;
+        transferTab: (tabId: string, targetWindowId: string) => void;
+        getTab: (id: string) => Promise<TabData | null>;
         onInitWithData: (callback: (tabData: TabData) => void) => () => void;
         onReceive: (callback: (tabData: TabData) => void) => () => void;
         onDropIndicator: (callback: (show: boolean) => void) => () => void;
+      };
+      dragPreview: {
+        show: (title: string, x: number, y: number) => void;
+        update: (x: number, y: number) => void;
+        hide: () => void;
+      };
+      state: {
+        onTabsChange: (callback: (state: { tabs: TabData[]; activeTabId: string | null }) => void) => () => void;
+        getTabState: () => Promise<{ tabs: TabData[]; activeTabId: string | null }>;
       };
       platform: NodeJS.Platform;
       getUserHome: () => Promise<string>;
@@ -140,6 +225,7 @@ declare global {
       settings: {
         setCloseToTray: (enabled: boolean) => void;
         setTrayRestoreBehavior: (behavior: 'restore' | 'newWindow') => void;
+        setStartOnLogin: (enabled: boolean) => void;
       };
     };
   }

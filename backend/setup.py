@@ -1,5 +1,5 @@
 """
-Cython build configuration for XPLORER backend.
+Cython build configuration for eX backend.
 Run with: python setup.py build_ext --inplace
 """
 
@@ -58,7 +58,7 @@ extensions = [
 ]
 
 setup(
-    name="xplorer-backend",
+    name="ex-backend",
     ext_modules=cythonize(
         extensions,
         compiler_directives={

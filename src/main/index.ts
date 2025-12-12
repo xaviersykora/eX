@@ -4,6 +4,7 @@ import { existsSync } from 'fs';
 import { spawn, ChildProcess } from 'child_process';
 import { WindowManager, setCloseToTrayEnabled, setTrayVisibilityCallback } from './window/WindowManager';
 import { ZmqBridge } from './ipc/ZmqBridge';
+import { GlobalState } from './state/GlobalState';
 
 let windowManager: WindowManager;
 let zmqBridge: ZmqBridge;
@@ -133,8 +134,8 @@ function stopBackend(): void {
   }
 }
 
-// Embedded 32x32 XPLORER logo as base64 PNG (tray icon)
-const TRAY_ICON_BASE64 = 'data:image/png;base64,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';
+// Embedded 32x32 eX logo as base64 PNG (tray icon)
+const TRAY_ICON_BASE64 = 'data:image/png;base64,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';
 
 function createTray(): void {
   if (tray) return;
@@ -143,11 +144,11 @@ function createTray(): void {
   const trayIcon = nativeImage.createFromDataURL(TRAY_ICON_BASE64);
 
   tray = new Tray(trayIcon.resize({ width: 16, height: 16 }));
-  tray.setToolTip('XPLORER');
+  tray.setToolTip('eX');
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Open XPLORER',
+      label: 'Open eX',
       click: () => {
         handleTrayClick();
       },
@@ -247,10 +248,38 @@ async function createWindow(): Promise<void> {
   await windowManager.createMainWindow();
 }
 
+// Check if started with --start-minimized flag (from login item)
+const startMinimized = process.argv.includes('--start-minimized');
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 app.whenReady().then(async () => {
-  await createWindow();
+  if (startMinimized) {
+    // Start minimized to tray - initialize backend and tray but don't create window
+    console.log('Starting minimized to tray...');
+
+    // Start backend if in production mode
+    if (!isDev) {
+      const backendStarted = await startBackend();
+      if (!backendStarted) {
+        console.error('Failed to start backend, app may not function correctly');
+      }
+    }
+
+    // Initialize ZeroMQ bridge to Python backend
+    zmqBridge = new ZmqBridge();
+    await zmqBridge.connect();
+
+    // Create window manager (but don't create window yet)
+    windowManager = new WindowManager(zmqBridge);
+
+    // Set up tray visibility callback and create tray
+    setTrayVisibilityCallback(updateTrayVisibility);
+    createTray();
+  } else {
+    // Normal startup - create window
+    await createWindow();
+  }
 
   app.on('activate', async () => {
     // On macOS it's common to re-create a window in the app when the
@@ -304,9 +333,87 @@ ipcMain.on('settings:trayRestoreBehavior', (_event, behavior: 'restore' | 'newWi
   trayRestoreBehavior = behavior;
 });
 
+ipcMain.on('settings:startOnLogin', (_event, enabled: boolean) => {
+  // Only actually set login item in production (packaged) mode
+  if (app.isPackaged) {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      // Start minimized to tray
+      args: ['--start-minimized'],
+    });
+    console.log(`Start on login ${enabled ? 'enabled' : 'disabled'}`);
+  } else {
+    console.log(`[DEV] Start on login would be ${enabled ? 'enabled' : 'disabled'} (skipped in dev mode)`);
+  }
+});
+
 // Handle getting current settings (for init)
 ipcMain.handle('settings:getCloseToTray', () => closeToTrayEnabled);
 ipcMain.handle('settings:getTrayRestoreBehavior', () => trayRestoreBehavior);
+
+// Helper to get windowId from event sender
+const getWindowIdFromEvent = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent): string | null => {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  if (!win) return null;
+  return GlobalState.getWindowId(win);
+};
+
+// Handle tab state actions from renderer
+ipcMain.on('tabs:create', (event, path?: string) => {
+  const windowId = getWindowIdFromEvent(event);
+  if (windowId) {
+    GlobalState.tabState.createTab(path, windowId);
+  }
+});
+
+ipcMain.on('tabs:close', (_event, id: string) => {
+  GlobalState.tabState.closeTab(id);
+});
+
+ipcMain.on('tabs:setActive', (_event, id: string) => {
+  GlobalState.tabState.setActiveTab(id);
+});
+
+ipcMain.on('tabs:navigateTo', (_event, path: string) => {
+  GlobalState.tabState.navigateTo(path);
+});
+
+ipcMain.on('tabs:goBack', () => {
+  GlobalState.tabState.goBack();
+});
+
+ipcMain.on('tabs:goForward', () => {
+  GlobalState.tabState.goForward();
+});
+
+ipcMain.handle('tabs:getState', (event) => {
+  const windowId = getWindowIdFromEvent(event);
+  if (!windowId) return { tabs: [], activeTabId: null };
+
+  const tabs = GlobalState.tabState.getTabsForWindow(windowId);
+  const activeTabId = GlobalState.tabState.getActiveTabForWindow(windowId);
+  return { tabs, activeTabId };
+});
+
+// Tab transfer handlers (for inter-window drag and drop)
+ipcMain.on('tabs:addTab', (event, tab: { id: string; path: string; title: string; history: string[]; historyIndex: number }) => {
+  const windowId = getWindowIdFromEvent(event);
+  if (windowId) {
+    GlobalState.tabState.addTab(tab, windowId);
+  }
+});
+
+ipcMain.on('tabs:removeTab', (_event, id: string) => {
+  GlobalState.tabState.removeTab(id);
+});
+
+ipcMain.on('tabs:transferTab', (_event, tabId: string, targetWindowId: string) => {
+  GlobalState.tabState.transferTab(tabId, targetWindowId);
+});
+
+ipcMain.handle('tabs:getTab', (_event, id: string) => {
+  return GlobalState.tabState.getTab(id);
+});
 
 // Handle native file drag
 ipcMain.on('drag:start', (event, filePaths: string[]) => {

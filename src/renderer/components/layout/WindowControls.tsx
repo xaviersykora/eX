@@ -8,11 +8,12 @@ export const WindowControls: React.FC = () => {
 
   useEffect(() => {
     // Check initial maximized state
-    const checkMaximized = async () => {
-      // We'll track this via the window events in main process
-      // For now, assume not maximized
-    };
-    checkMaximized();
+    window.xplorer.window.isMaximized().then(setIsMaximized);
+
+    // Subscribe to maximize state changes
+    const unsubscribe = window.xplorer.window.onMaximizeChange(setIsMaximized);
+
+    return () => unsubscribe();
   }, []);
 
   const handleMinimize = () => {
@@ -21,7 +22,6 @@ export const WindowControls: React.FC = () => {
 
   const handleMaximize = () => {
     window.xplorer.window.maximize();
-    setIsMaximized(!isMaximized);
   };
 
   const handleClose = () => {

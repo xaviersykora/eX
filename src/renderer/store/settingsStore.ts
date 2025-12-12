@@ -139,6 +139,7 @@ interface SettingsState {
   closeToTray: boolean;
   trayRestoreBehavior: 'restore' | 'newWindow';
   promptBeforeOpen: boolean;
+  startOnLogin: boolean;
 
   // Individual file/folder customizations
   fileCustomizations: FileCustomization[];
@@ -191,6 +192,7 @@ interface SettingsActions {
   setCloseToTray: (enabled: boolean) => void;
   setTrayRestoreBehavior: (behavior: 'restore' | 'newWindow') => void;
   setPromptBeforeOpen: (enabled: boolean) => void;
+  setStartOnLogin: (enabled: boolean) => void;
 
   // File customization actions
   setFileCustomization: (path: string, customization: Partial<Omit<FileCustomization, 'path'>>) => void;
@@ -268,6 +270,7 @@ const defaultSettings: SettingsState = {
   closeToTray: false,
   trayRestoreBehavior: 'newWindow',
   promptBeforeOpen: true,
+  startOnLogin: false,
 
   // Individual file/folder customizations
   fileCustomizations: [],
@@ -573,6 +576,12 @@ export const useSettingsStore = create<SettingsState & SettingsActions>()(
 
       setPromptBeforeOpen: (enabled) => {
         set({ promptBeforeOpen: enabled });
+      },
+
+      setStartOnLogin: (enabled) => {
+        set({ startOnLogin: enabled });
+        // Sync with main process (only works in production)
+        window.xplorer.settings.setStartOnLogin(enabled);
       },
 
       // File customization actions

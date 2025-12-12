@@ -1,16 +1,35 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { Plus, X } from 'lucide-react';
-import { useTabStore, type Tab } from '../../store/tabStore';
+import { useSharedState } from '../../contexts/StateProvider';
 import { WindowControls } from '../layout/WindowControls';
 import './TabBar.css';
 
-const TAB_BAR_HEIGHT = 40; // Height of the tab bar area for drop detection
-const DRAG_THRESHOLD = 10; // Pixels to move before starting drag
+const TAB_BAR_HEIGHT = 40;
+const DRAG_THRESHOLD = 10;
+
+interface TabData {
+  id: string;
+  path: string;
+  title: string;
+  history: string[];
+  historyIndex: number;
+}
 
 export const TabBar: React.FC = () => {
-  const { tabs, activeTabId, createTab, closeTab, setActiveTab, getTab, removeTab, addTab, replaceAllTabs } = useTabStore();
+  const { tabState, tabs: tabActions } = useSharedState();
+  const { tabs, activeTabId } = tabState;
 
-  const [dragState, setDragState] = useState<{
+  // Track maximized state synchronously
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  // Current window ID for tab drag detection
+  const [currentWindowId, setCurrentWindowId] = useState<string | null>(null);
+
+  // Drop target indicator
+  const [isDropTarget, setIsDropTarget] = useState(false);
+
+  // Tab drag state
+  const [tabDragState, setTabDragState] = useState<{
     isDragging: boolean;
     tabId: string | null;
     startX: number;
@@ -28,52 +47,53 @@ export const TabBar: React.FC = () => {
     hasMoved: false,
   });
 
-  const [isDropTarget, setIsDropTarget] = useState(false);
-  const [currentWindowId, setCurrentWindowId] = useState<string | null>(null);
   const [hoverTargetWindowId, setHoverTargetWindowId] = useState<string | null>(null);
-  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
+  const dragPreviewShownRef = useRef(false);
+
+  // Refs for custom window drag handling
+  const isWindowDraggingRef = useRef(false);
+  const windowDragStartRef = useRef<{ mouseX: number; mouseY: number; windowX: number; windowY: number } | null>(null);
+  const hasWindowDragThresholdRef = useRef(false);
+  const pendingWindowDragRef = useRef<{ screenX: number; screenY: number; isMaximized: boolean } | null>(null);
 
   // Get current window ID on mount
   useEffect(() => {
     window.xplorer.window.getId().then(setCurrentWindowId);
   }, []);
 
-  // Listen for tabs from other windows
+  // Subscribe to maximize state changes
   useEffect(() => {
-    const unsubInit = window.xplorer.tabs.onInitWithData((tabData) => {
-      // This window was created with a tab - replace default tab
-      replaceAllTabs(tabData);
-    });
+    window.xplorer.window.isMaximized().then(setIsMaximized);
+    const unsubscribe = window.xplorer.window.onMaximizeChange(setIsMaximized);
+    return () => unsubscribe();
+  }, []);
 
-    const unsubReceive = window.xplorer.tabs.onReceive((tabData) => {
-      // Tab transferred from another window - add it
-      addTab(tabData);
-    });
-
+  // Subscribe to tab events (receive, drop indicator)
+  useEffect(() => {
     const unsubDropIndicator = window.xplorer.tabs.onDropIndicator((show) => {
-      // Another window is dragging a tab over our tab bar
       setIsDropTarget(show);
     });
 
     return () => {
-      unsubInit();
-      unsubReceive();
       unsubDropIndicator();
     };
-  }, [replaceAllTabs, addTab]);
+  }, []);
 
   const handleMiddleClick = (e: React.MouseEvent, tabId: string) => {
     if (e.button === 1) {
       e.preventDefault();
-      closeTab(tabId);
+      tabActions.close(tabId);
     }
   };
 
-  const handleMouseDown = (e: React.MouseEvent, tabId: string) => {
-    // Only left click for dragging
+  // --- Tab Drag Handling ---
+  const handleTabMouseDown = (e: React.MouseEvent, tabId: string) => {
     if (e.button !== 0) return;
 
-    setDragState({
+    // Prevent window drag when clicking on a tab
+    e.stopPropagation();
+
+    setTabDragState({
       isDragging: true,
       tabId,
       startX: e.screenX,
@@ -84,26 +104,36 @@ export const TabBar: React.FC = () => {
     });
   };
 
-  const handleMouseMove = useCallback(async (e: MouseEvent) => {
-    if (!dragState.isDragging || !dragState.tabId) return;
+  const handleTabMouseMove = useCallback(async (e: MouseEvent) => {
+    if (!tabDragState.isDragging || !tabDragState.tabId) return;
 
-    const deltaX = Math.abs(e.screenX - dragState.startX);
-    const deltaY = Math.abs(e.screenY - dragState.startY);
+    const deltaX = Math.abs(e.screenX - tabDragState.startX);
+    const deltaY = Math.abs(e.screenY - tabDragState.startY);
 
-    // Check if we've moved enough to start the drag
-    if (!dragState.hasMoved && (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD)) {
-      setDragState((prev) => ({ ...prev, hasMoved: true }));
+    if (!tabDragState.hasMoved && (deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD)) {
+      setTabDragState((prev) => ({ ...prev, hasMoved: true }));
     }
 
-    if (dragState.hasMoved || deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
-      setDragState((prev) => ({
+    if (tabDragState.hasMoved || deltaX > DRAG_THRESHOLD || deltaY > DRAG_THRESHOLD) {
+      setTabDragState((prev) => ({
         ...prev,
         currentX: e.screenX,
         currentY: e.screenY,
         hasMoved: true,
       }));
 
-      // Check if hovering over another window's tab bar
+      // Show or update drag preview overlay
+      const tab = tabs.find(t => t.id === tabDragState.tabId);
+      if (tab) {
+        if (!dragPreviewShownRef.current) {
+          window.xplorer.dragPreview.show(tab.title, e.screenX, e.screenY);
+          dragPreviewShownRef.current = true;
+        } else {
+          window.xplorer.dragPreview.update(e.screenX, e.screenY);
+        }
+      }
+
+      // Check for target windows
       const allWindowIds = await window.xplorer.window.getAllIds();
       let foundTargetId: string | null = null;
 
@@ -113,7 +143,7 @@ export const TabBar: React.FC = () => {
         const bounds = await window.xplorer.window.getBounds(windowId);
         if (!bounds) continue;
 
-        // Check if mouse is within the tab bar area of this window
+        // Check if cursor is within the tab bar area of this window
         if (
           e.screenX >= bounds.x &&
           e.screenX <= bounds.x + bounds.width &&
@@ -125,24 +155,22 @@ export const TabBar: React.FC = () => {
         }
       }
 
-      // Update drop indicator on target windows
+      // Update drop indicators
       if (foundTargetId !== hoverTargetWindowId) {
-        // Hide indicator on previous target
         if (hoverTargetWindowId) {
           window.xplorer.window.showDropIndicator(hoverTargetWindowId, false);
         }
-        // Show indicator on new target
         if (foundTargetId) {
           window.xplorer.window.showDropIndicator(foundTargetId, true);
         }
         setHoverTargetWindowId(foundTargetId);
       }
     }
-  }, [dragState.isDragging, dragState.tabId, dragState.startX, dragState.startY, dragState.hasMoved, currentWindowId, hoverTargetWindowId]);
+  }, [tabDragState.isDragging, tabDragState.tabId, tabDragState.startX, tabDragState.startY, tabDragState.hasMoved, currentWindowId, hoverTargetWindowId]);
 
-  const handleMouseUp = useCallback(async (e: MouseEvent) => {
-    if (!dragState.isDragging || !dragState.tabId) {
-      setDragState({
+  const handleTabMouseUp = useCallback(async (e: MouseEvent) => {
+    if (!tabDragState.isDragging || !tabDragState.tabId) {
+      setTabDragState({
         isDragging: false,
         tabId: null,
         startX: 0,
@@ -154,9 +182,13 @@ export const TabBar: React.FC = () => {
       return;
     }
 
-    const tab = getTab(dragState.tabId);
-    if (!tab || !dragState.hasMoved) {
-      setDragState({
+    const tab = tabs.find(t => t.id === tabDragState.tabId);
+    if (!tab || !tabDragState.hasMoved) {
+      // No movement - just a click, activate the tab
+      if (tab && !tabDragState.hasMoved) {
+        tabActions.setActive(tab.id);
+      }
+      setTabDragState({
         isDragging: false,
         tabId: null,
         startX: 0,
@@ -168,7 +200,7 @@ export const TabBar: React.FC = () => {
       return;
     }
 
-    // Check if dropped on another window's tab bar
+    // Check for target window
     const allWindowIds = await window.xplorer.window.getAllIds();
     let targetWindowId: string | null = null;
 
@@ -178,7 +210,6 @@ export const TabBar: React.FC = () => {
       const bounds = await window.xplorer.window.getBounds(windowId);
       if (!bounds) continue;
 
-      // Check if mouse is within the tab bar area of this window
       if (
         e.screenX >= bounds.x &&
         e.screenX <= bounds.x + bounds.width &&
@@ -190,7 +221,7 @@ export const TabBar: React.FC = () => {
       }
     }
 
-    const tabData: Tab = {
+    const tabData: TabData = {
       id: tab.id,
       path: tab.path,
       title: tab.title,
@@ -199,12 +230,11 @@ export const TabBar: React.FC = () => {
     };
 
     if (targetWindowId) {
-      // Transfer tab to another window
-      window.xplorer.window.transferTab(targetWindowId, tabData);
+      // Transfer tab to target window using the new transferTab method
+      window.xplorer.tabs.transferTab(tab.id, targetWindowId);
       window.xplorer.window.focus(targetWindowId);
-      removeTab(tab.id);
     } else {
-      // Check if dragged outside all windows - create new window
+      // Check if dropped outside all windows - create new window
       let isOutsideAllWindows = true;
 
       for (const windowId of allWindowIds) {
@@ -222,20 +252,25 @@ export const TabBar: React.FC = () => {
         }
       }
 
+      // Only create new window if we have more than one tab
       if (isOutsideAllWindows && tabs.length > 1) {
-        // Create new window with this tab
+        // Remove tab from current window first, then create new window with it
+        window.xplorer.tabs.removeTab(tab.id);
         await window.xplorer.window.createWithTab(tabData, e.screenX, e.screenY);
-        removeTab(tab.id);
       }
     }
 
-    // Clear drop indicator on any target window
+    // Clean up drop indicators and drag preview
     if (hoverTargetWindowId) {
       window.xplorer.window.showDropIndicator(hoverTargetWindowId, false);
       setHoverTargetWindowId(null);
     }
 
-    setDragState({
+    // Hide drag preview overlay
+    window.xplorer.dragPreview.hide();
+    dragPreviewShownRef.current = false;
+
+    setTabDragState({
       isDragging: false,
       tabId: null,
       startX: 0,
@@ -244,95 +279,182 @@ export const TabBar: React.FC = () => {
       currentY: 0,
       hasMoved: false,
     });
-  }, [dragState, tabs.length, currentWindowId, getTab, removeTab, hoverTargetWindowId]);
+  }, [tabDragState, tabs, currentWindowId, hoverTargetWindowId, tabActions]);
 
-  // Set up global mouse event listeners when dragging
+  // Set up tab drag event listeners
   useEffect(() => {
-    if (dragState.isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+    if (tabDragState.isDragging) {
+      document.addEventListener('mousemove', handleTabMouseMove);
+      document.addEventListener('mouseup', handleTabMouseUp);
 
       return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
+        document.removeEventListener('mousemove', handleTabMouseMove);
+        document.removeEventListener('mouseup', handleTabMouseUp);
       };
     }
-  }, [dragState.isDragging, handleMouseMove, handleMouseUp]);
+  }, [tabDragState.isDragging, handleTabMouseMove, handleTabMouseUp]);
 
-  // Create/update drag preview
+  // Clean up drag preview on unmount
   useEffect(() => {
-    if (dragState.isDragging && dragState.hasMoved && dragState.tabId) {
-      const tab = getTab(dragState.tabId);
-      if (!tab) return;
-
-      if (!dragPreviewRef.current) {
-        const preview = document.createElement('div');
-        preview.className = 'tab-drag-preview';
-        preview.textContent = tab.title;
-        document.body.appendChild(preview);
-        dragPreviewRef.current = preview;
-      }
-
-      const preview = dragPreviewRef.current;
-      // Position relative to viewport using clientX/Y from the last known position
-      preview.style.left = `${dragState.currentX - dragState.startX + 50}px`;
-      preview.style.top = `${dragState.currentY - dragState.startY + 50}px`;
-      preview.style.position = 'fixed';
-      preview.style.transform = 'translate(-50%, -50%)';
-    } else {
-      if (dragPreviewRef.current) {
-        dragPreviewRef.current.remove();
-        dragPreviewRef.current = null;
-      }
-    }
-
     return () => {
-      if (dragPreviewRef.current) {
-        dragPreviewRef.current.remove();
-        dragPreviewRef.current = null;
+      if (dragPreviewShownRef.current) {
+        window.xplorer.dragPreview.hide();
+        dragPreviewShownRef.current = false;
       }
     };
-  }, [dragState.isDragging, dragState.hasMoved, dragState.tabId, dragState.currentX, dragState.currentY, getTab, dragState.startX, dragState.startY]);
+  }, []);
+
+  // --- Window Drag Handling (for title bar) ---
+  const handleWindowMouseMove = useCallback((e: MouseEvent) => {
+    // Check if we have a pending drag that hasn't met threshold yet
+    if (pendingWindowDragRef.current && !hasWindowDragThresholdRef.current) {
+      const deltaX = Math.abs(e.screenX - pendingWindowDragRef.current.screenX);
+      const deltaY = Math.abs(e.screenY - pendingWindowDragRef.current.screenY);
+
+      if (deltaX >= DRAG_THRESHOLD || deltaY >= DRAG_THRESHOLD) {
+        hasWindowDragThresholdRef.current = true;
+        const { screenX, screenY, isMaximized: wasMaximized } = pendingWindowDragRef.current;
+
+        if (wasMaximized) {
+          window.xplorer.window.dragUnmaximize(screenX, screenY).then((newBounds) => {
+            if (newBounds) {
+              isWindowDraggingRef.current = true;
+              windowDragStartRef.current = {
+                mouseX: screenX,
+                mouseY: screenY,
+                windowX: newBounds.x,
+                windowY: newBounds.y,
+              };
+              const currentDeltaX = e.screenX - screenX;
+              const currentDeltaY = e.screenY - screenY;
+              window.xplorer.window.setPosition(newBounds.x + currentDeltaX, newBounds.y + currentDeltaY);
+            }
+          });
+        } else {
+          window.xplorer.window.getPosition().then((pos) => {
+            if (pos) {
+              isWindowDraggingRef.current = true;
+              windowDragStartRef.current = {
+                mouseX: screenX,
+                mouseY: screenY,
+                windowX: pos.x,
+                windowY: pos.y,
+              };
+              const currentDeltaX = e.screenX - screenX;
+              const currentDeltaY = e.screenY - screenY;
+              window.xplorer.window.setPosition(pos.x + currentDeltaX, pos.y + currentDeltaY);
+            }
+          });
+        }
+      }
+      return;
+    }
+
+    if (!isWindowDraggingRef.current || !windowDragStartRef.current) return;
+
+    const deltaX = e.screenX - windowDragStartRef.current.mouseX;
+    const deltaY = e.screenY - windowDragStartRef.current.mouseY;
+
+    const newX = windowDragStartRef.current.windowX + deltaX;
+    const newY = windowDragStartRef.current.windowY + deltaY;
+
+    window.xplorer.window.setPosition(newX, newY);
+  }, []);
+
+  const handleWindowMouseUp = useCallback(() => {
+    isWindowDraggingRef.current = false;
+    windowDragStartRef.current = null;
+    hasWindowDragThresholdRef.current = false;
+    pendingWindowDragRef.current = null;
+    document.removeEventListener('mousemove', handleWindowMouseMove);
+    document.removeEventListener('mouseup', handleWindowMouseUp);
+  }, [handleWindowMouseMove]);
+
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('mousemove', handleWindowMouseMove);
+      document.removeEventListener('mouseup', handleWindowMouseUp);
+    };
+  }, [handleWindowMouseMove, handleWindowMouseUp]);
+
+  const handleTitleBarMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+
+    const target = e.target as HTMLElement;
+    if (target.closest('.tabbar-tabs') || target.closest('.tabbar-new') || target.closest('.window-controls')) {
+      return;
+    }
+
+    e.preventDefault();
+
+    pendingWindowDragRef.current = {
+      screenX: e.screenX,
+      screenY: e.screenY,
+      isMaximized,
+    };
+    hasWindowDragThresholdRef.current = false;
+
+    document.addEventListener('mousemove', handleWindowMouseMove);
+    document.addEventListener('mouseup', handleWindowMouseUp);
+  };
+
+  const handleTitleBarDoubleClick = (e: React.MouseEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('.tabbar-tabs') || target.closest('.tabbar-new') || target.closest('.window-controls')) {
+      return;
+    }
+
+    window.xplorer.window.maximize();
+  };
 
   return (
-    <div className={`tabbar ${isDropTarget ? 'drop-target' : ''}`}>
+    <div
+      className={`tabbar ${isDropTarget ? 'drop-target' : ''}`}
+      onMouseDown={handleTitleBarMouseDown}
+      onDoubleClick={handleTitleBarDoubleClick}
+    >
       <div className="tabbar-tabs">
         {tabs.map((tab) => (
           <div
             key={tab.id}
             className={`tab ${tab.id === activeTabId ? 'active' : ''} ${
-              dragState.isDragging && dragState.tabId === tab.id && dragState.hasMoved ? 'dragging' : ''
+              tabDragState.isDragging && tabDragState.tabId === tab.id && tabDragState.hasMoved ? 'dragging' : ''
             }`}
-            onClick={() => !dragState.hasMoved && setActiveTab(tab.id)}
+            onClick={() => !tabDragState.hasMoved && tabActions.setActive(tab.id)}
             onMouseDown={(e) => {
               handleMiddleClick(e, tab.id);
-              handleMouseDown(e, tab.id);
+              handleTabMouseDown(e, tab.id);
             }}
           >
             <span className="tab-title" title={tab.path}>
               {tab.title}
             </span>
-            <button
-              className="tab-close"
-              onClick={(e) => {
-                e.stopPropagation();
-                closeTab(tab.id);
-              }}
-              title="Close tab"
-            >
-              <X size={14} />
-            </button>
+            {tabs.length > 1 && (
+              <button
+                className="tab-close"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  tabActions.close(tab.id);
+                }}
+                title="Close tab"
+              >
+                <X size={14} />
+              </button>
+            )}
           </div>
         ))}
       </div>
 
       <button
         className="tabbar-new"
-        onClick={() => createTab()}
+        onClick={() => tabActions.create()}
         title="New tab (Ctrl+T)"
       >
         <Plus size={16} />
       </button>
+
+      {/* Spacer to create draggable empty space */}
+      <div className="tabbar-spacer" />
 
       <WindowControls />
     </div>

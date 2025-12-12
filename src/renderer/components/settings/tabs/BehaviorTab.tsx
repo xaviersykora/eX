@@ -13,6 +13,8 @@ export const BehaviorTab: React.FC = () => {
     setCloseToTray,
     trayRestoreBehavior,
     setTrayRestoreBehavior,
+    startOnLogin,
+    setStartOnLogin,
   } = useSettingsStore();
 
   return (
@@ -74,6 +76,23 @@ export const BehaviorTab: React.FC = () => {
 
       <div className="settings-section">
         <h3 className="settings-section-title">System Tray</h3>
+
+        <div className="settings-row">
+          <div className="settings-row-info">
+            <span className="settings-row-label">Start on login</span>
+            <span className="settings-row-description">
+              Automatically start eX in the system tray when you log in to Windows
+            </span>
+          </div>
+          <button
+            className={`toggle-switch ${startOnLogin ? 'active' : ''}`}
+            onClick={() => setStartOnLogin(!startOnLogin)}
+            role="switch"
+            aria-checked={startOnLogin}
+          >
+            <div className="toggle-switch-handle" />
+          </button>
+        </div>
 
         <div className="settings-row">
           <div className="settings-row-info">

@@ -1,10 +1,18 @@
 {
-  "name": "xplorer",
+  "name": "ex-file-explorer",
   "version": "0.0.1-alpha",
   "description": "A minimal open-source replacement for Microsoft Windows Explorer",
   "main": "dist/main/index.js",
-  "author": "XPLORER Team",
+  "author": "Xavier Sykora",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xaviersykora/eX.git"
+  },
+  "homepage": "https://github.com/xaviersykora/eX#readme",
+  "bugs": {
+    "url": "https://github.com/xaviersykora/eX/issues"
+  },
   "scripts": {
     "dev": "concurrently -k -n backend,frontend -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
     "dev:backend": "cd backend && python -m xplorer.server",
@@ -41,8 +49,8 @@
     "vite": "^7.2.4"
   },
   "build": {
-    "appId": "com.xplorer.app",
-    "productName": "XPLORER",
+    "appId": "com.xaviersykora.ex",
+    "productName": "eX",
     "directories": {
       "output": "release"
     },
@@ -70,7 +78,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "XPLORER"
+      "shortcutName": "eX"
     }
   }
 }

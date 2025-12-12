@@ -29,14 +29,15 @@ import {
   Folder,
   Pencil,
 } from 'lucide-react';
-import { useTabStore } from '../../store/tabStore';
+import { useSharedState } from '../../contexts/StateProvider';
 import { useFileStore } from '../../store/fileStore';
 import { SettingsModal } from '../settings/SettingsModal';
 import type { ViewMode, SortField, SortDirection } from '@shared/types';
 import './Toolbar.css';
 
 export const Toolbar: React.FC = () => {
-  const { goBack, goForward, canGoBack, canGoForward, navigateTo, tabs, activeTabId } = useTabStore();
+  const { tabState, tabs: tabActions } = useSharedState();
+  const { tabs, activeTabId } = tabState;
   const { viewMode, setViewMode, selectedIds, getSelectedFiles, triggerRefresh, showHidden, setShowHidden, showInfoPanel, toggleInfoPanel, setPendingNewFolderPath, sortConfig, setSortConfig, thumbnailSize, setThumbnailSize, iconSize, setIconSize, setEditingPath } = useFileStore();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showSortMenu, setShowSortMenu] = useState(false);
@@ -45,7 +46,6 @@ export const Toolbar: React.FC = () => {
   const [sliderPosition, setSliderPosition] = useState<{ x: number; y: number } | null>(null);
   const [showSettings, setShowSettings] = useState(false);
 
-  // Refs for dropdown positioning
   const addButtonRef = useRef<HTMLButtonElement>(null);
   const sortButtonRef = useRef<HTMLButtonElement>(null);
   const [addMenuPos, setAddMenuPos] = useState<{ x: number; y: number } | null>(null);
@@ -53,10 +53,18 @@ export const Toolbar: React.FC = () => {
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
-  // Keyboard shortcuts for delete confirmation dialog
+  const canGoBack = () => {
+    const tab = tabs.find((t) => t.id === activeTabId);
+    return tab ? tab.historyIndex > 0 : false;
+  };
+
+  const canGoForward = () => {
+    const tab = tabs.find((t) => t.id === activeTabId);
+    return tab ? tab.historyIndex < tab.history.length - 1 : false;
+  };
+
   useEffect(() => {
     if (!showDeleteConfirm) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -66,7 +74,6 @@ export const Toolbar: React.FC = () => {
         handleDeleteCancel();
       }
     };
-
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [showDeleteConfirm]);
@@ -77,28 +84,23 @@ export const Toolbar: React.FC = () => {
     if (parts.length > 1) {
       parts.pop();
       const parentPath = parts.join('\\') + '\\';
-      navigateTo(parentPath);
+      tabActions.navigateTo(parentPath);
     }
   };
 
   const handleRefresh = () => {
-    // Trigger a refresh without adding to history
     triggerRefresh();
   };
 
   const handleNewFolder = async () => {
     if (!activeTab) return;
     try {
-      // Generate unique folder name
       const folderName = 'New Folder';
       const basePath = activeTab.path.endsWith('\\') ? activeTab.path : activeTab.path + '\\';
-
       const response = await window.xplorer.request('fs.mkdir', {
         path: `${basePath}${folderName}`,
       });
-
       if (response.success && response.data) {
-        // Set the pending path so the folder will auto-enter edit mode after refresh
         const newFolderPath = (response.data as { path: string }).path;
         setPendingNewFolderPath(newFolderPath);
         triggerRefresh();
@@ -113,19 +115,14 @@ export const Toolbar: React.FC = () => {
   const handleNewFile = async (extension: string) => {
     if (!activeTab) return;
     setShowAddMenu(false);
-
     try {
       const basePath = activeTab.path.endsWith('\\') ? activeTab.path : activeTab.path + '\\';
-      let fileName = `New File${extension}`;
-
-      // Create the file
+      const fileName = `New File${extension}`;
       const response = await window.xplorer.request('fs.writeFile', {
         path: `${basePath}${fileName}`,
         content: '',
       });
-
       if (response.success && response.data) {
-        // Set the pending path so the file will auto-enter edit mode after refresh
         const newFilePath = (response.data as { path: string }).path;
         setPendingNewFolderPath(newFilePath);
         triggerRefresh();
@@ -140,8 +137,6 @@ export const Toolbar: React.FC = () => {
   const handleCreateShortcut = async () => {
     if (!activeTab) return;
     setShowAddMenu(false);
-
-    // For now, show the "New Shortcut" shell dialog
     try {
       await window.xplorer.request('shell.execute', {
         path: 'rundll32.exe',
@@ -168,7 +163,6 @@ export const Toolbar: React.FC = () => {
   const handleCopy = async () => {
     const selected = getSelectedFiles();
     if (selected.length === 0) return;
-
     try {
       await window.xplorer.request('clipboard.copy', {
         paths: selected.map((f) => f.path),
@@ -182,7 +176,6 @@ export const Toolbar: React.FC = () => {
   const handleCut = async () => {
     const selected = getSelectedFiles();
     if (selected.length === 0) return;
-
     try {
       await window.xplorer.request('clipboard.copy', {
         paths: selected.map((f) => f.path),
@@ -195,7 +188,6 @@ export const Toolbar: React.FC = () => {
 
   const handlePaste = async () => {
     if (!activeTab) return;
-
     try {
       const response = await window.xplorer.request('clipboard.paste', {
         destination: activeTab.path,
@@ -225,7 +217,6 @@ export const Toolbar: React.FC = () => {
   const handleDeleteConfirm = async () => {
     const selected = getSelectedFiles();
     if (selected.length === 0) return;
-
     try {
       const response = await window.xplorer.request('fs.delete', {
         paths: selected.map((f) => f.path),
@@ -263,7 +254,6 @@ export const Toolbar: React.FC = () => {
 
   const handleSortFieldChange = (field: SortField) => {
     if (sortConfig.field === field) {
-      // Toggle direction if same field
       setSortConfig({ direction: sortConfig.direction === 'asc' ? 'desc' : 'asc' });
     } else {
       setSortConfig({ field, direction: 'asc' });
@@ -286,7 +276,7 @@ export const Toolbar: React.FC = () => {
       <div className="toolbar-group">
         <button
           className="toolbar-button"
-          onClick={goBack}
+          onClick={tabActions.goBack}
           disabled={!canGoBack()}
           title="Back (Alt+Left)"
         >
@@ -294,7 +284,7 @@ export const Toolbar: React.FC = () => {
         </button>
         <button
           className="toolbar-button"
-          onClick={goForward}
+          onClick={tabActions.goForward}
           disabled={!canGoForward()}
           title="Forward (Alt+Right)"
         >

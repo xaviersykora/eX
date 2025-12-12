@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo, useMemo } from 'react';
 import {
   Folder,
   File,
@@ -11,15 +11,18 @@ import {
   X,
   Pencil,
   Copy,
+  Home,
 } from 'lucide-react';
 import { useFileStore, type HomeSelectedFile } from '../../store/fileStore';
 import { useSettingsStore, type CustomFileType, type DefaultTypeIcons, type FileCustomization } from '../../store/settingsStore';
+import { useSharedState } from '../../contexts/StateProvider';
 import type { FileInfo } from '@shared/types';
 import './InfoPanel.css';
 
 // Supported extensions for thumbnails
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.ico', '.tiff', '.tif']);
 const VIDEO_EXTENSIONS = new Set(['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.flv', '.m4v', '.mpg', '.mpeg']);
+const AUDIO_EXTENSIONS = new Set(['.mp3', '.flac', '.m4a', '.aac', '.ogg', '.wma', '.wav', '.opus']);
 
 // Thumbnail cache for info panel
 const infoPanelThumbnailCache = new Map<string, string>();
@@ -38,7 +41,7 @@ const InfoPanelThumbnail: React.FC<InfoPanelThumbnailProps> = memo(({ file, size
 
   const ext = file.extension.toLowerCase();
   const isDirectory = file.isDirectory;
-  const supportsThumbnail = !isDirectory && (IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext));
+  const supportsThumbnail = !isDirectory && (IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext) || AUDIO_EXTENSIONS.has(ext));
 
   useEffect(() => {
     if (!supportsThumbnail) {
@@ -235,6 +238,7 @@ interface FolderStats {
 export const InfoPanel: React.FC = () => {
   const { getSelectedFiles, files, toggleInfoPanel, triggerRefresh, homeSelectedFile } = useFileStore();
   const { measureFolderSize, customFileTypes, defaultTypeIcons, fileCustomizations } = useSettingsStore();
+  const { tabState } = useSharedState();
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
@@ -242,10 +246,28 @@ export const InfoPanel: React.FC = () => {
   const [folderSize, setFolderSize] = useState<number | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [loadingSize, setLoadingSize] = useState(false);
+  // State for current directory info (when no selection)
+  const [currentDirStats, setCurrentDirStats] = useState<FolderStats | null>(null);
+  const [currentDirSize, setCurrentDirSize] = useState<number | null>(null);
+  const [currentDirInfo, setCurrentDirInfo] = useState<{ createdAt: number; modifiedAt: number } | null>(null);
+  const [loadingCurrentDirStats, setLoadingCurrentDirStats] = useState(false);
+  const [loadingCurrentDirSize, setLoadingCurrentDirSize] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const selectedFiles = getSelectedFiles();
   const singleFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
+
+  // Get current path from active tab
+  const currentPath = useMemo(() => {
+    const activeTab = tabState.tabs.find(t => t.id === tabState.activeTabId);
+    return activeTab?.path || '';
+  }, [tabState]);
+
+  // Get current directory name
+  const currentDirName = useMemo(() => {
+    if (!currentPath || currentPath === 'Home') return 'Home';
+    return currentPath.split('\\').pop() || currentPath;
+  }, [currentPath]);
 
   // Reset editing state when selection changes
   useEffect(() => {
@@ -299,6 +321,68 @@ export const InfoPanel: React.FC = () => {
       setFolderSize(null);
     }
   }, [singleFile?.path, singleFile?.isDirectory, measureFolderSize]);
+
+  // Fetch current directory info when no selection (for showing directory details)
+  useEffect(() => {
+    const hasSelection = selectedFiles.length > 0;
+    const hasHomeSelection = homeSelectedFile !== null;
+
+    if (!hasSelection && !hasHomeSelection && currentPath && currentPath !== 'Home') {
+      setLoadingCurrentDirStats(true);
+      setCurrentDirStats(null);
+      setCurrentDirInfo(null);
+
+      // Fetch folder stats
+      window.xplorer.request('fs.folderStats', { path: currentPath })
+        .then((response) => {
+          if (response.success && response.data) {
+            setCurrentDirStats(response.data as FolderStats);
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to fetch current dir stats:', error);
+        })
+        .finally(() => {
+          setLoadingCurrentDirStats(false);
+        });
+
+      // Fetch directory metadata (created/modified dates)
+      window.xplorer.request('fs.stat', { path: currentPath })
+        .then((response) => {
+          if (response.success && response.data) {
+            const data = response.data as { createdAt: number; modifiedAt: number };
+            setCurrentDirInfo({ createdAt: data.createdAt, modifiedAt: data.modifiedAt });
+          }
+        })
+        .catch((error) => {
+          console.error('Failed to fetch current dir info:', error);
+        });
+
+      // Fetch size if enabled
+      if (measureFolderSize) {
+        setLoadingCurrentDirSize(true);
+        setCurrentDirSize(null);
+
+        window.xplorer.request('fs.folderSize', { path: currentPath })
+          .then((response) => {
+            if (response.success && response.data) {
+              const data = response.data as { path: string; size: number };
+              setCurrentDirSize(data.size);
+            }
+          })
+          .catch((error) => {
+            console.error('Failed to fetch current dir size:', error);
+          })
+          .finally(() => {
+            setLoadingCurrentDirSize(false);
+          });
+      }
+    } else {
+      setCurrentDirStats(null);
+      setCurrentDirSize(null);
+      setCurrentDirInfo(null);
+    }
+  }, [currentPath, selectedFiles.length, homeSelectedFile, measureFolderSize]);
 
   // Focus input when editing starts
   useEffect(() => {
@@ -385,12 +469,103 @@ export const InfoPanel: React.FC = () => {
   const multiSelection = selectedFiles.length > 1;
   const hasHomeSelection = homeSelectedFile !== null && !hasSelection;
 
-  const renderNoSelection = () => (
-    <div className="info-panel-empty">
-      <Folder size={64} className="info-icon folder" />
-      <p>{files.length} items</p>
-    </div>
-  );
+  const renderNoSelection = () => {
+    // Show current directory details when no selection
+    if (currentPath && currentPath !== 'Home') {
+      return (
+        <div className="info-panel-content">
+          <div className="info-panel-preview">
+            <Folder size={72} className="info-icon folder" />
+          </div>
+          <div className="info-panel-name-container">
+            <div className="info-panel-name" title={currentPath}>
+              <span>{currentDirName}</span>
+            </div>
+          </div>
+          <div className="info-panel-type">File folder</div>
+
+          <div className="info-panel-details">
+            <div className="info-detail-row">
+              <span className="info-detail-label">Contains</span>
+              <span className="info-detail-value">
+                {loadingCurrentDirStats ? (
+                  'Loading...'
+                ) : currentDirStats ? (
+                  `${currentDirStats.fileCount} ${currentDirStats.fileCount === 1 ? 'File' : 'Files'}, ${currentDirStats.folderCount} ${currentDirStats.folderCount === 1 ? 'Folder' : 'Folders'}`
+                ) : (
+                  `${files.length} items`
+                )}
+              </span>
+            </div>
+            {measureFolderSize && (
+              <div className="info-detail-row">
+                <span className="info-detail-label">Size</span>
+                <span className="info-detail-value">
+                  {loadingCurrentDirSize ? 'Calculating...' : currentDirSize !== null ? formatSize(currentDirSize) : '—'}
+                </span>
+              </div>
+            )}
+            {currentDirInfo && (
+              <>
+                <div className="info-detail-row">
+                  <span className="info-detail-label">Modified</span>
+                  <span className="info-detail-value">{formatDate(currentDirInfo.modifiedAt)}</span>
+                </div>
+                <div className="info-detail-row">
+                  <span className="info-detail-label">Created</span>
+                  <span className="info-detail-value">{formatDate(currentDirInfo.createdAt)}</span>
+                </div>
+              </>
+            )}
+            <div className="info-detail-row info-path-row">
+              <span className="info-detail-label">Path</span>
+              <div className="info-path-container">
+                <input
+                  type="text"
+                  readOnly
+                  value={currentPath}
+                  className="info-path-input"
+                  title={currentPath}
+                  onClick={(e) => e.currentTarget.select()}
+                />
+                <button
+                  className="info-path-copy"
+                  onClick={() => navigator.clipboard.writeText(currentPath)}
+                  title="Copy path"
+                >
+                  <Copy size={12} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Special handling for Home page
+    if (currentPath === 'Home') {
+      return (
+        <div className="info-panel-content">
+          <div className="info-panel-preview">
+            <Home size={72} className="info-icon home" />
+          </div>
+          <div className="info-panel-name-container">
+            <div className="info-panel-name">
+              <span>Home</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Fallback for invalid/empty path
+    return (
+      <div className="info-panel-empty">
+        <Folder size={64} className="info-icon folder" />
+        <p>{files.length} items</p>
+      </div>
+    );
+  };
 
   // Render a home-selected file (from Recent Files on home page)
   const renderHomeSelectedFile = () => {
@@ -399,7 +574,7 @@ export const InfoPanel: React.FC = () => {
     const fileCustomization = fileCustomizations.find((c) => c.path === homeSelectedFile.path);
     const fileAsInfo = { ...homeSelectedFile, isHidden: false, isSystem: false, isReadOnly: false, mimeType: undefined } as FileInfo;
     const fallbackIcon = getFileIcon(fileAsInfo, 72, customFileTypes, defaultTypeIcons, fileCustomization);
-    const supportsThumbnail = !homeSelectedFile.isDirectory && (IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext));
+    const supportsThumbnail = !homeSelectedFile.isDirectory && (IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext) || AUDIO_EXTENSIONS.has(ext));
 
     return (
       <div className="info-panel-content">
@@ -449,7 +624,7 @@ export const InfoPanel: React.FC = () => {
     const fileCustomization = fileCustomizations.find((c) => c.path === file.path);
     const fallbackIcon = getFileIcon(file, 72, customFileTypes, defaultTypeIcons, fileCustomization);
     const ext = file.extension.toLowerCase();
-    const supportsThumbnail = !file.isDirectory && (IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext));
+    const supportsThumbnail = !file.isDirectory && (IMAGE_EXTENSIONS.has(ext) || VIDEO_EXTENSIONS.has(ext) || AUDIO_EXTENSIONS.has(ext));
 
     return (
     <div className="info-panel-content">

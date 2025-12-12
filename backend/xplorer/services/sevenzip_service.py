@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 
 _executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="7zip_")
 
+# Windows constants for hiding console window
+SW_HIDE = 0
+
 # Common 7-Zip installation paths
 SEVENZIP_PATHS = [
     r"C:\Program Files\7-Zip\7z.exe",
@@ -56,12 +59,18 @@ class SevenZipService:
 
         # Try to find in PATH
         try:
+            startupinfo = None
+            if os.name == 'nt':
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = SW_HIDE
+
             result = subprocess.run(
                 ["where", "7z.exe"],
                 capture_output=True,
                 text=True,
                 timeout=5,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                startupinfo=startupinfo
             )
             if result.returncode == 0 and result.stdout.strip():
                 cls._sevenzip_path = result.stdout.strip().split('\n')[0]
@@ -117,37 +126,56 @@ class SevenZipService:
             if not sevenzip:
                 return {"success": False, "error": "7-Zip not installed"}
 
+            if not paths:
+                return {"success": False, "error": "No files specified"}
+
+            if not archive_path:
+                return {"success": False, "error": "No archive path specified"}
+
             try:
-                # Build command
-                # 7z a <archive> <files...>
-                cmd = [sevenzip, "a", "-y"]
-
-                # Set format
+                # Build command matching 7-Zip's expected format:
+                # 7z a -tzip "<ArchiveName>.zip" "<FilesOrFoldersToCompress>"
+                # 7z a -t7z "<ArchiveName>.7z" "<FilesOrFoldersToCompress>"
                 if format == "7z":
-                    cmd.append("-t7z")
+                    cmd = [sevenzip, "a", "-t7z", archive_path]
                 else:
-                    cmd.append("-tzip")
+                    cmd = [sevenzip, "a", "-tzip", archive_path]
 
-                cmd.append(archive_path)
                 cmd.extend(paths)
+
+                logger.info(f"7-Zip command: {' '.join(cmd)}")
+
+                # Use STARTUPINFO to hide console window (more reliable than CREATE_NO_WINDOW)
+                startupinfo = None
+                if os.name == 'nt':
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = SW_HIDE
 
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
                     timeout=300,  # 5 minute timeout
-                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                    startupinfo=startupinfo
                 )
 
-                if result.returncode == 0:
+                logger.info(f"7-Zip returncode: {result.returncode}")
+                logger.info(f"7-Zip stdout: {result.stdout}")
+                if result.stderr:
+                    logger.warning(f"7-Zip stderr: {result.stderr}")
+
+                # Check for success - returncode 0 or "Everything is Ok" in output
+                if result.returncode == 0 or "Everything is Ok" in result.stdout:
                     return {
                         "success": True,
                         "archivePath": archive_path,
                     }
                 else:
+                    error_msg = result.stderr or result.stdout or "Archive creation failed"
                     return {
                         "success": False,
-                        "error": result.stderr or "Archive creation failed",
+                        "error": error_msg,
                     }
 
             except subprocess.TimeoutExpired:
@@ -306,15 +334,28 @@ class SevenZipService:
                 # 7z x <archive> -o<destination> -y
                 cmd = [sevenzip, "x", archive_path, f"-o{dest}", "-y"]
 
+                logger.info(f"7-Zip extract command: {' '.join(cmd)}")
+
+                # Use STARTUPINFO to hide console window
+                startupinfo = None
+                if os.name == 'nt':
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = SW_HIDE
+
                 result = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
                     timeout=300,
-                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
+                    startupinfo=startupinfo
                 )
 
-                if result.returncode == 0:
+                logger.info(f"7-Zip extract returncode: {result.returncode}")
+                if result.stderr:
+                    logger.warning(f"7-Zip extract stderr: {result.stderr}")
+
+                if result.returncode == 0 or "Everything is Ok" in result.stdout:
                     return {
                         "success": True,
                         "destination": dest,

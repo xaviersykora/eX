@@ -265,6 +265,10 @@
   color: var(--icon-color-default);
 }
 
+.info-icon.home {
+  color: var(--accent-color);
+}
+
 /* Thumbnail styles */
 .info-panel-thumbnail-img {
   border-radius: var(--radius-sm);

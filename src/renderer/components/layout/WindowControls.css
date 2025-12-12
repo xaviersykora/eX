@@ -2,7 +2,6 @@
   display: flex;
   align-items: stretch;
   height: 100%;
-  -webkit-app-region: no-drag;
   margin-left: auto;
 }
 

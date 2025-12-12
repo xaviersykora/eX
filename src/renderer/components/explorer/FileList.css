@@ -16,6 +16,7 @@
   font-weight: 500;
   color: var(--text-secondary);
   user-select: none;
+  min-width: 0; /* Allow shrinking in flex container */
 }
 
 .file-list-header .file-cell {
@@ -212,11 +213,11 @@
   cursor: grabbing;
 }
 
-/* Thumbnails view mode - details with larger icons */
+/* Thumbnails view mode - details with larger icons/thumbnails */
 .file-row.thumbnail-mode {
   display: flex;
   align-items: center;
-  height: 48px;
+  min-height: 72px;
 }
 
 .file-row.thumbnail-mode .file-cell.name {
@@ -228,7 +229,15 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-right: var(--spacing-sm);
+  background-color: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.file-row.thumbnail-mode .thumbnail-icon .file-thumbnail-img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 
 .file-row.thumbnail-mode .file-name {
@@ -245,8 +254,7 @@
 }
 
 .file-icons-grid {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: var(--spacing-sm);
   padding: var(--spacing-md);
   align-content: flex-start;
@@ -396,4 +404,66 @@
 .file-item-icon-image .file-thumbnail-img {
   max-width: 100%;
   max-height: 100%;
+}
+
+/* Glass UI mode - use outline instead of fill for better visibility */
+/* Use high-specificity selectors to ensure these override all other rules */
+html[data-ui-style="glass"] .file-list,
+[data-ui-style="glass"] .file-list {
+  --row-hover: transparent !important;
+  /* Note: --row-alt is NOT set to transparent here to preserve alternating row colors */
+}
+
+html[data-ui-style="glass"] .file-list .file-row:hover,
+html[data-ui-style="glass"] .file-list .file-row.alt:hover,
+[data-ui-style="glass"] .file-row:hover,
+[data-ui-style="glass"] .file-row.alt:hover {
+  background: transparent !important;
+  background-color: transparent !important;
+  outline: 2px solid rgba(255, 255, 255, 0.3);
+  outline-offset: -2px;
+}
+
+html[data-ui-style="glass"] .file-list .file-item-icon:hover,
+[data-ui-style="glass"] .file-item-icon:hover {
+  background: transparent !important;
+  background-color: transparent !important;
+  outline: 2px solid rgba(255, 255, 255, 0.3);
+  outline-offset: -2px;
+}
+
+html[data-ui-style="glass"] .file-list .file-row.selected,
+html[data-ui-style="glass"] .file-list .file-row.alt.selected,
+[data-ui-style="glass"] .file-row.selected,
+[data-ui-style="glass"] .file-row.alt.selected {
+  background: rgba(var(--accent-color-rgb, 0, 120, 212), 0.3) !important;
+  background-color: rgba(var(--accent-color-rgb, 0, 120, 212), 0.3) !important;
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+html[data-ui-style="glass"] .file-list .file-row.selected:not(:focus-within),
+html[data-ui-style="glass"] .file-list .file-row.alt.selected:not(:focus-within),
+[data-ui-style="glass"] .file-row.selected:not(:focus-within),
+[data-ui-style="glass"] .file-row.alt.selected:not(:focus-within) {
+  background: transparent !important;
+  background-color: transparent !important;
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: -2px;
+}
+
+html[data-ui-style="glass"] .file-list .file-item-icon.selected,
+[data-ui-style="glass"] .file-item-icon.selected {
+  background: rgba(var(--accent-color-rgb, 0, 120, 212), 0.3) !important;
+  background-color: rgba(var(--accent-color-rgb, 0, 120, 212), 0.3) !important;
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+html[data-ui-style="glass"] .file-list .file-item-icon.selected:not(:focus-within),
+[data-ui-style="glass"] .file-item-icon.selected:not(:focus-within) {
+  background: transparent !important;
+  background-color: transparent !important;
+  outline: 2px solid rgba(255, 255, 255, 0.4);
+  outline-offset: -2px;
 }

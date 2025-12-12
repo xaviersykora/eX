@@ -1,6 +1,7 @@
 import React from 'react';
 import { useFileStore } from '../../store/fileStore';
-import { useTabStore, HOME_PATH } from '../../store/tabStore';
+import { useSharedState } from '../../contexts/StateProvider';
+import { HOME_PATH } from '@shared/types';
 import './StatusBar.css';
 
 const formatSize = (bytes: number): string => {
@@ -13,7 +14,8 @@ const formatSize = (bytes: number): string => {
 
 export const StatusBar: React.FC = () => {
   const { files, selectedIds, getSelectedFiles } = useFileStore();
-  const { tabs, activeTabId } = useTabStore();
+  const { tabState } = useSharedState();
+  const { tabs, activeTabId } = tabState;
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const isHomePage = activeTab?.path === HOME_PATH;

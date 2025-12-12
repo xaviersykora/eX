@@ -136,10 +136,10 @@
   /* Dialog glass */
   --dialog-bg: rgba(255, 255, 255, 0.95);
 
-  /* Row colors glass */
-  --row-hover: rgba(240, 240, 240, 0.6);
-  --row-selected-unfocused: rgba(224, 224, 224, 0.6);
-  --row-alt: rgba(0, 0, 0, 0.07); /* Subtle light grey for glass effect */
+  /* Row colors glass - transparent hover with outline handled by CSS */
+  --row-hover: transparent;
+  --row-selected-unfocused: transparent;
+  --row-alt: rgba(0, 0, 0, 0.04); /* Subtle alternating rows for readability */
 
   /* Input glass */
   --input-bg: rgba(255, 255, 255, 0.8);

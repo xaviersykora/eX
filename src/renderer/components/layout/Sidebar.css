@@ -64,6 +64,15 @@
   background-color: var(--sidebar-selected);
 }
 
+.sidebar-item.active {
+  font-weight: 600;
+  color: var(--accent-color);
+}
+
+.sidebar-item.active svg {
+  color: var(--accent-color);
+}
+
 .sidebar-item svg {
   flex-shrink: 0;
   color: var(--icon-color);

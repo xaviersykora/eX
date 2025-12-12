@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ChevronRight, Search, X, Loader2, Home } from 'lucide-react';
-import { useTabStore, HOME_PATH } from '../../store/tabStore';
+import { useSharedState } from '../../contexts/StateProvider';
 import { useFileStore } from '../../store/fileStore';
 import { InputContextMenu, useInputContextMenu } from '../common/InputContextMenu';
+import { HOME_PATH } from '@shared/types';
 import './AddressBar.css';
 
 interface AddressBarProps {
@@ -14,7 +15,9 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
   const [editValue, setEditValue] = useState(path);
   const [searchQuery, setSearchQuery] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
-  const { navigateTo } = useTabStore();
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSearchedQueryRef = useRef<string>('');
+  const { tabs: tabActions } = useSharedState();
   const {
     setLoading,
     setError,
@@ -22,17 +25,26 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
     startSearch,
     cancelSearch,
     setSearchResults,
+    triggerRefresh,
+    setHomeSearchQuery,
   } = useFileStore();
   const { contextMenu: inputContextMenu, handleContextMenu: handleInputContextMenu, closeContextMenu: closeInputContextMenu } = useInputContextMenu();
 
+  // Track previous path to detect actual path changes
+  const prevPathRef = useRef(path);
+
   useEffect(() => {
     setEditValue(path);
-    // Cancel any ongoing search when path changes
-    if (search.isActive) {
-      cancelSearch();
+    // Reset search when path actually changes (whether actively searching or showing results)
+    if (prevPathRef.current !== path) {
+      if (search.isActive || search.searchId) {
+        cancelSearch();
+      }
       setSearchQuery('');
+      lastSearchedQueryRef.current = '';
     }
-  }, [path, cancelSearch]);
+    prevPathRef.current = path;
+  }, [path, cancelSearch, search.isActive, search.searchId]);
 
   useEffect(() => {
     if (isEditing && inputRef.current) {
@@ -41,18 +53,96 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
     }
   }, [isEditing]);
 
+  // Perform the actual search
+  const performSearch = useCallback(async (query: string, force: boolean = false) => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery || !path) return;
+
+    // Skip if we already searched for this exact query (unless forced)
+    if (!force && lastSearchedQueryRef.current === trimmedQuery) return;
+    lastSearchedQueryRef.current = trimmedQuery;
+
+    // Home page: filter recent files instead of filesystem search
+    if (path === HOME_PATH) {
+      setHomeSearchQuery(trimmedQuery);
+      return;
+    }
+
+    const searchId = startSearch(trimmedQuery);
+    setLoading(true);
+    try {
+      const response = await window.xplorer.request('fs.search', {
+        path: path,
+        query: trimmedQuery,
+        recursive: true,
+      });
+      if (response.success && response.data) {
+        setSearchResults(searchId, response.data as any[]);
+      } else {
+        const currentSearchId = useFileStore.getState().search.searchId;
+        if (currentSearchId === searchId) {
+          setError(response.error?.message || 'Search failed');
+          cancelSearch();
+        }
+      }
+    } catch (error) {
+      const currentSearchId = useFileStore.getState().search.searchId;
+      if (currentSearchId === searchId) {
+        setError(error instanceof Error ? error.message : 'Search failed');
+        cancelSearch();
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [path, startSearch, setLoading, setSearchResults, setError, cancelSearch, setHomeSearchQuery]);
+
+  // Debounced live search as user types
+  useEffect(() => {
+    // Clear any pending search timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+
+    // If query is empty, cancel search and refresh to show normal directory
+    if (!searchQuery.trim()) {
+      lastSearchedQueryRef.current = '';
+      // Check if we're showing search results (searchId set) or actively searching
+      if (search.isActive || search.searchId) {
+        cancelSearch();
+        triggerRefresh();
+      }
+      // Clear home search filter
+      if (path === HOME_PATH) {
+        setHomeSearchQuery('');
+      }
+      return;
+    }
+
+    // Debounce search by 300ms
+    searchTimeoutRef.current = setTimeout(() => {
+      performSearch(searchQuery);
+    }, 300);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery, path, search.isActive, search.searchId, cancelSearch, triggerRefresh, performSearch, setHomeSearchQuery]);
+
   const isHomePage = path === HOME_PATH;
   const pathParts = isHomePage ? [] : path.split('\\').filter(Boolean);
 
   const handleBreadcrumbClick = (index: number) => {
     const newPath = pathParts.slice(0, index + 1).join('\\') + '\\';
-    navigateTo(newPath);
+    tabActions.navigateTo(newPath);
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editValue.trim()) {
-      navigateTo(editValue.trim());
+      tabActions.navigateTo(editValue.trim());
     }
     setIsEditing(false);
   };
@@ -62,49 +152,21 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
     setIsEditing(false);
   };
 
-  const handleSearchSubmit = async (e: React.FormEvent) => {
+  const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!searchQuery.trim() || !path || path === HOME_PATH) return;
-
-    // Start a new search with a unique ID
-    const searchId = startSearch(searchQuery.trim());
-    setLoading(true);
-
-    try {
-      const response = await window.xplorer.request('fs.search', {
-        path: path,
-        query: searchQuery.trim(),
-        recursive: true,
-      });
-
-      // Only apply results if search is still valid (not cancelled)
-      if (response.success && response.data) {
-        setSearchResults(searchId, response.data as any[]);
-      } else {
-        // Check if search was cancelled before showing error
-        const currentSearchId = useFileStore.getState().search.searchId;
-        if (currentSearchId === searchId) {
-          setError(response.error?.message || 'Search failed');
-          cancelSearch();
-        }
-      }
-    } catch (error) {
-      // Check if search was cancelled before showing error
-      const currentSearchId = useFileStore.getState().search.searchId;
-      if (currentSearchId === searchId) {
-        setError(error instanceof Error ? error.message : 'Search failed');
-        cancelSearch();
-      }
-    } finally {
-      setLoading(false);
+    // Clear timeout and search immediately on Enter
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+      searchTimeoutRef.current = null;
+    }
+    if (searchQuery.trim()) {
+      performSearch(searchQuery, true); // Force search on Enter
     }
   };
 
   const handleClearSearch = () => {
     setSearchQuery('');
-    cancelSearch();
-    // Reload current directory
-    navigateTo(path);
+    // The useEffect will handle canceling search and refreshing
   };
 
   return (
@@ -150,7 +212,6 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
           </div>
         )}
       </div>
-
       <form onSubmit={handleSearchSubmit} className="addressbar-search">
         {search.isActive ? (
           <Loader2 size={14} className="search-icon spinning" />
@@ -160,10 +221,9 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
         <input
           type="text"
           className="search-input"
-          placeholder="Search"
+          placeholder={isHomePage ? 'Search recent files' : 'Search'}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          disabled={isHomePage}
           onContextMenu={handleInputContextMenu}
         />
         {(searchQuery || search.isActive) && (
@@ -172,8 +232,6 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
           </button>
         )}
       </form>
-
-      {/* Input context menu */}
       {inputContextMenu && (
         <InputContextMenu
           x={inputContextMenu.x}

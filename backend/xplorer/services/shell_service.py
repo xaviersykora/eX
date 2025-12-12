@@ -33,9 +33,10 @@ _executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="shell_")
 # Supported file extensions for thumbnails
 IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.ico', '.tiff', '.tif'}
 VIDEO_EXTENSIONS = {'.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm', '.flv', '.m4v', '.mpg', '.mpeg'}
+AUDIO_EXTENSIONS = {'.mp3', '.flac', '.m4a', '.aac', '.ogg', '.wma', '.wav', '.opus'}
 
 # Cache directory for thumbnails
-THUMBNAIL_CACHE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'XPlorer', 'ThumbnailCache')
+THUMBNAIL_CACHE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', ''), 'eX', 'ThumbnailCache')
 
 # Windows Recent folder path
 RECENT_FOLDER = os.path.join(os.environ.get('APPDATA', ''), 'Microsoft', 'Windows', 'Recent')
@@ -170,6 +171,100 @@ class ShellService:
         return ""
 
     @staticmethod
+    def _generate_audio_thumbnail(path: str, size: int) -> str:
+        """Extract album art from an audio file."""
+        try:
+            from PIL import Image
+
+            ext = os.path.splitext(path)[1].lower()
+            image_data = None
+
+            # Try mutagen for various formats
+            try:
+                from mutagen import File as MutagenFile
+                from mutagen.mp3 import MP3
+                from mutagen.id3 import ID3
+                from mutagen.flac import FLAC
+                from mutagen.mp4 import MP4
+
+                if ext == '.mp3':
+                    try:
+                        audio = ID3(path)
+                        for key in audio.keys():
+                            if key.startswith('APIC'):
+                                image_data = audio[key].data
+                                break
+                    except Exception:
+                        pass
+
+                elif ext == '.flac':
+                    try:
+                        audio = FLAC(path)
+                        if audio.pictures:
+                            image_data = audio.pictures[0].data
+                    except Exception:
+                        pass
+
+                elif ext in ('.m4a', '.aac', '.mp4'):
+                    try:
+                        audio = MP4(path)
+                        if 'covr' in audio.tags:
+                            image_data = bytes(audio.tags['covr'][0])
+                    except Exception:
+                        pass
+
+                else:
+                    # Generic approach using mutagen File
+                    try:
+                        audio = MutagenFile(path)
+                        if audio is not None:
+                            # Try various common picture tags
+                            if hasattr(audio, 'pictures') and audio.pictures:
+                                image_data = audio.pictures[0].data
+                            elif hasattr(audio, 'tags') and audio.tags:
+                                for key in audio.tags.keys():
+                                    if 'APIC' in str(key) or 'covr' in str(key):
+                                        tag_data = audio.tags[key]
+                                        if hasattr(tag_data, 'data'):
+                                            image_data = tag_data.data
+                                        elif isinstance(tag_data, list) and len(tag_data) > 0:
+                                            image_data = bytes(tag_data[0])
+                                        break
+                    except Exception:
+                        pass
+
+            except ImportError:
+                logger.debug("mutagen not available for audio thumbnails")
+
+            if image_data:
+                # Convert image data to thumbnail
+                img = Image.open(BytesIO(image_data))
+
+                # Convert to RGB if needed
+                if img.mode in ('RGBA', 'LA', 'P'):
+                    background = Image.new('RGB', img.size, (255, 255, 255))
+                    if img.mode == 'P':
+                        img = img.convert('RGBA')
+                    if img.mode in ('RGBA', 'LA'):
+                        background.paste(img, mask=img.split()[-1])
+                        img = background
+                elif img.mode != 'RGB':
+                    img = img.convert('RGB')
+
+                # Create thumbnail
+                img.thumbnail((size, size), Image.Resampling.LANCZOS)
+
+                # Save to buffer
+                buffer = BytesIO()
+                img.save(buffer, format="PNG", optimize=True)
+                return base64.b64encode(buffer.getvalue()).decode("ascii")
+
+        except Exception as e:
+            logger.debug(f"Failed to generate audio thumbnail for {path}: {e}")
+
+        return ""
+
+    @staticmethod
     async def get_thumbnail(path: str, size: int = 96) -> str:
         """Get file thumbnail as base64-encoded PNG."""
         import asyncio
@@ -198,6 +293,8 @@ class ShellService:
                     thumbnail_data = ShellService._generate_image_thumbnail(path, size)
                 elif ext in VIDEO_EXTENSIONS:
                     thumbnail_data = ShellService._generate_video_thumbnail(path, size)
+                elif ext in AUDIO_EXTENSIONS:
+                    thumbnail_data = ShellService._generate_audio_thumbnail(path, size)
 
                 # Cache the result if successful
                 if thumbnail_data:

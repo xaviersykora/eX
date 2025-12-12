@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Folder,
   FileText,
@@ -113,7 +114,7 @@ export const EmptySpaceContextMenu: React.FC<EmptySpaceContextMenuProps> = ({
     { id: 'new-shortcut', label: 'Shortcut', icon: <Link2 size={16} /> },
   ];
 
-  return (
+  return createPortal(
     <div
       ref={menuRef}
       className="context-menu"
@@ -209,6 +210,7 @@ export const EmptySpaceContextMenu: React.FC<EmptySpaceContextMenuProps> = ({
         <span className="context-menu-icon"><Info size={16} /></span>
         <span className="context-menu-label">Properties</span>
       </button>
-    </div>
+    </div>,
+    document.body
   );
 };

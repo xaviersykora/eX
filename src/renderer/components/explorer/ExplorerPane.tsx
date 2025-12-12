@@ -1,15 +1,17 @@
 import React, { useEffect, useCallback } from 'react';
 import { FileList } from './FileList';
 import { HomePage } from '../home/HomePage';
-import { useTabStore, HOME_PATH } from '../../store/tabStore';
+import { useSharedState } from '../../contexts/StateProvider';
 import { useFileStore } from '../../store/fileStore';
 import { useSettingsStore } from '../../store/settingsStore';
 import type { FileInfo, FSChangeEvent } from '@shared/types';
+import { HOME_PATH } from '@shared/types';
 import './ExplorerPane.css';
 
 export const ExplorerPane: React.FC = () => {
-  const { tabs, activeTabId, navigateTo } = useTabStore();
-  const { setFiles, setLoading, setError, addFile, removeFile, updateFile, refreshCounter } = useFileStore();
+  const { tabState, tabs: tabActions } = useSharedState();
+  const { tabs, activeTabId } = tabState;
+  const { setFiles, setLoading, setError, addFile, removeFile, updateFile, refreshCounter, isSearchActive } = useFileStore();
   const { addRecentFile, promptBeforeOpen } = useSettingsStore();
 
   const activeTab = tabs.find((t) => t.id === activeTabId);
@@ -18,14 +20,14 @@ export const ExplorerPane: React.FC = () => {
   const isHomePage = currentPath === HOME_PATH;
 
   const loadDirectory = useCallback(async (path: string) => {
-    if (!path || path === HOME_PATH) return;
-
+    if (!path || path === HOME_PATH) {
+      setFiles([]); // Clear files for home page
+      return;
+    }
     setLoading(true);
     setError(null);
-
     try {
       const response = await window.xplorer.request('fs.list', { path });
-
       if (response.success && response.data) {
         setFiles(response.data as FileInfo[]);
       } else {
@@ -38,29 +40,25 @@ export const ExplorerPane: React.FC = () => {
     }
   }, [setFiles, setLoading, setError]);
 
-  // Load directory when path changes or refresh is triggered
   useEffect(() => {
-    loadDirectory(currentPath);
-  }, [currentPath, loadDirectory, refreshCounter]);
+    // Don't reload directory when search is active (would overwrite search results)
+    if (!isSearchActive()) {
+      loadDirectory(currentPath);
+    }
+  }, [currentPath, loadDirectory, refreshCounter, isSearchActive]);
 
-  // Subscribe to file system changes
   useEffect(() => {
     if (!currentPath || currentPath === HOME_PATH) return;
 
     window.xplorer.subscribe(currentPath);
-
     const unsubscribe = window.xplorer.onEvent((event) => {
       if (event.type === 'fs.changed') {
         const fsEvent = event as FSChangeEvent;
         const eventData = fsEvent.data;
-
         switch (eventData.eventType) {
           case 'created':
-            // Fetch info for new file and add it
             window.xplorer.request('fs.info', { path: fsEvent.path }).then((res) => {
-              if (res.success && res.data) {
-                addFile(res.data as FileInfo);
-              }
+              if (res.success && res.data) addFile(res.data as FileInfo);
             });
             break;
           case 'deleted':
@@ -68,24 +66,16 @@ export const ExplorerPane: React.FC = () => {
             break;
           case 'modified':
             window.xplorer.request('fs.info', { path: fsEvent.path }).then((res) => {
-              if (res.success && res.data) {
-                const info = res.data as FileInfo;
-                updateFile(fsEvent.path, info);
-              }
+              if (res.success && res.data) updateFile(fsEvent.path, res.data as FileInfo);
             });
             break;
           case 'renamed':
-            if (eventData.oldPath) {
-              removeFile(eventData.oldPath);
-            }
+            if (eventData.oldPath) removeFile(eventData.oldPath);
             window.xplorer.request('fs.info', { path: fsEvent.path }).then((res) => {
-              if (res.success && res.data) {
-                addFile(res.data as FileInfo);
-              }
+              if (res.success && res.data) addFile(res.data as FileInfo);
             });
             break;
           case 'overflow':
-            // Too many changes, reload the directory
             loadDirectory(currentPath);
             break;
         }
@@ -100,19 +90,16 @@ export const ExplorerPane: React.FC = () => {
 
   const handleOpen = useCallback(async (file: FileInfo) => {
     if (file.isDirectory) {
-      navigateTo(file.path);
+      tabActions.navigateTo(file.path);
     } else {
-      // Check if prompt is needed
       if (promptBeforeOpen) {
         const confirmed = window.confirm(`Open "${file.name}" with the default application?`);
         if (!confirmed) return;
       }
-      // Open file with default application
       window.xplorer.request('shell.open', { path: file.path });
-      // Track in recent files
       addRecentFile(file.path, file.name);
     }
-  }, [navigateTo, addRecentFile, promptBeforeOpen]);
+  }, [tabActions, addRecentFile, promptBeforeOpen]);
 
   return (
     <div className="explorer-pane">

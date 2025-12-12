@@ -50,6 +50,7 @@ interface FileState {
   folderSizes: Map<string, number>; // Cached folder sizes (path -> size in bytes)
   loadingFolderSizes: Set<string>; // Paths currently being calculated
   homeSelectedFile: HomeSelectedFile | null; // File selected from Home page
+  homeSearchQuery: string; // Search query for filtering Home page recent files
 }
 
 interface FileActions {
@@ -99,6 +100,9 @@ interface FileActions {
   // Home page selection
   setHomeSelectedFile: (file: HomeSelectedFile | null) => void;
   getHomeSelectedFile: () => HomeSelectedFile | null;
+
+  // Home page search
+  setHomeSearchQuery: (query: string) => void;
 }
 
 const sortFiles = (files: FileInfo[], config: SortConfig, folderSizes?: Map<string, number>): FileInfo[] => {
@@ -164,7 +168,7 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
     size: true,
     createdAt: false,
   },
-  thumbnailSize: 48,
+  thumbnailSize: 64,
   iconSize: 96,
   refreshCounter: 0,
   search: {
@@ -180,6 +184,7 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
   folderSizes: new Map(),
   loadingFolderSizes: new Set(),
   homeSelectedFile: null,
+  homeSearchQuery: '',
 
   setFiles: (files) => {
     const { sortConfig, showHidden, pendingNewFolderPath, folderSizes } = get();
@@ -495,5 +500,10 @@ export const useFileStore = create<FileState & FileActions>()((set, get) => ({
 
   getHomeSelectedFile: () => {
     return get().homeSelectedFile;
+  },
+
+  // Home page search
+  setHomeSearchQuery: (query: string) => {
+    set({ homeSearchQuery: query });
   },
 }));

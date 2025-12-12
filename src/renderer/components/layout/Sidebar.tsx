@@ -22,11 +22,12 @@ import {
   GripVertical,
   Layers,
 } from 'lucide-react';
-import { useTabStore, HOME_PATH } from '../../store/tabStore';
+import { useSharedState } from '../../contexts/StateProvider';
 import { useSettingsStore, type QuickAccessItem, type CustomSidebarSection } from '../../store/settingsStore';
 import { useFileStore } from '../../store/fileStore';
 import { InputContextMenu, useInputContextMenu } from '../common/InputContextMenu';
 import type { DriveInfo } from '@shared/types';
+import { HOME_PATH } from '@shared/types';
 import './Sidebar.css';
 
 // Icon mapping
@@ -65,7 +66,13 @@ export const Sidebar: React.FC = () => {
   const customSectionButtonRefs = useRef<{ [key: string]: HTMLButtonElement | null }>({});
   const customSectionMenuRef = useRef<HTMLDivElement>(null);
 
-  const { navigateTo } = useTabStore();
+  const { tabs: tabActions, tabState } = useSharedState();
+
+  // Get current path from active tab
+  const currentPath = (() => {
+    const activeTab = tabState.tabs.find(t => t.id === tabState.activeTabId);
+    return activeTab?.path || '';
+  })();
   const {
     quickAccessItems,
     initializeDefaultQuickAccess,
@@ -81,11 +88,9 @@ export const Sidebar: React.FC = () => {
   const { triggerRefresh } = useFileStore();
   const { contextMenu: inputContextMenu, handleContextMenu: handleInputContextMenu, closeContextMenu: closeInputContextMenu } = useInputContextMenu();
 
-  // Track expanded state for custom sections
   const [expandedCustomSections, setExpandedCustomSections] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    // Fetch drives from backend
     const fetchDrives = async () => {
       try {
         const response = await window.xplorer.request('fs.drives');
@@ -94,20 +99,9 @@ export const Sidebar: React.FC = () => {
         }
       } catch (error) {
         console.error('Failed to fetch drives:', error);
-        // Fallback to C: drive
-        setDrives([{
-          letter: 'C:',
-          name: 'Local Disk',
-          type: 3,
-          totalSize: 0,
-          freeSpace: 0,
-          fileSystem: 'NTFS',
-          isReady: true,
-        }]);
+        setDrives([{ letter: 'C:', name: 'Local Disk', type: 3, totalSize: 0, freeSpace: 0, fileSystem: 'NTFS', isReady: true }]);
       }
     };
-
-    // Get user home directory and initialize quick access
     const initQuickAccess = async () => {
       try {
         const userHome = await window.xplorer.getUserHome();
@@ -117,17 +111,13 @@ export const Sidebar: React.FC = () => {
         await initializeDefaultQuickAccess('C:\\Users');
       }
     };
-
     fetchDrives();
     initQuickAccess();
   }, [initializeDefaultQuickAccess]);
 
-  // Handle click outside to close menus
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       const target = e.target as Node;
-
-      // Close quick access menu if clicking outside
       if (showQuickAccessMenu) {
         const menuEl = quickAccessMenuRef.current;
         const buttonEl = quickAccessButtonRef.current;
@@ -135,8 +125,6 @@ export const Sidebar: React.FC = () => {
           setShowQuickAccessMenu(false);
         }
       }
-
-      // Close custom section menu if clicking outside
       if (showCustomSectionMenu) {
         const menuEl = customSectionMenuRef.current;
         const buttonEl = customSectionButtonRefs.current[showCustomSectionMenu];
@@ -146,62 +134,47 @@ export const Sidebar: React.FC = () => {
         }
       }
     };
-
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showQuickAccessMenu, showCustomSectionMenu]);
 
-  // Sort quick access items by order and filter visible ones
   const visibleQuickAccess = [...quickAccessItems]
     .filter((item) => item.visible)
     .sort((a, b) => a.order - b.order);
 
   const toggleSection = (section: keyof typeof expandedSections) => {
-    setExpandedSections((prev) => ({
-      ...prev,
-      [section]: !prev[section],
-    }));
+    setExpandedSections((prev) => ({ ...prev, [section]: !prev[section] }));
   };
 
   const toggleCustomSection = (sectionId: string) => {
-    setExpandedCustomSections((prev) => ({
-      ...prev,
-      [sectionId]: !prev[sectionId],
-    }));
+    setExpandedCustomSections((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
   };
 
-  // Sort custom sections by order
   const sortedCustomSections = [...customSidebarSections].sort((a, b) => a.order - b.order);
 
-  // Get sorted section order for rendering
   const getSortedSectionOrder = () => {
     const existingIds = new Set(sidebarSectionOrder.map((s) => s.id));
     const customIds = customSidebarSections.map((s) => s.id);
-
-    // Add any custom sections not yet in the order
     let maxOrder = Math.max(...sidebarSectionOrder.map((s) => s.order), -1);
     const newSections = customIds
       .filter((id) => !existingIds.has(id))
       .map((id) => ({ id, visible: true, order: ++maxOrder }));
-
     return [...sidebarSectionOrder, ...newSections].sort((a, b) => a.order - b.order);
   };
 
   const sortedSectionOrder = getSortedSectionOrder();
 
-  // Check if a section is visible
   const isSectionVisible = (sectionId: string) => {
     const section = sortedSectionOrder.find((s) => s.id === sectionId);
     return section?.visible ?? true;
   };
 
   const handleNavigate = (path: string) => {
-    navigateTo(path);
+    tabActions.navigateTo(path);
   };
 
   const handleAddQuickAccess = () => {
     if (!newFolderPath.trim()) return;
-
     const name = newFolderPath.split('\\').pop() || newFolderPath;
     addQuickAccess({
       id: `custom-${Date.now()}`,
@@ -215,7 +188,6 @@ export const Sidebar: React.FC = () => {
 
   const handleAddToCustomSection = (sectionId: string) => {
     if (!newCustomSectionPath.trim()) return;
-
     const name = newCustomSectionPath.split('\\').pop() || newCustomSectionPath;
     addItemToSidebarSection(sectionId, {
       name,
@@ -224,7 +196,6 @@ export const Sidebar: React.FC = () => {
     setNewCustomSectionPath('');
   };
 
-  // Drag and drop handlers for reordering
   const handleDragStart = (e: React.DragEvent, itemId: string) => {
     setDraggedItemId(itemId);
     e.dataTransfer.effectAllowed = 'move';
@@ -248,22 +219,17 @@ export const Sidebar: React.FC = () => {
       setDragOverItemId(null);
       return;
     }
-
     const sortedItems = [...quickAccessItems].sort((a, b) => a.order - b.order);
     const draggedIndex = sortedItems.findIndex((item) => item.id === draggedItemId);
     const targetIndex = sortedItems.findIndex((item) => item.id === targetItemId);
-
     if (draggedIndex === -1 || targetIndex === -1) {
       setDraggedItemId(null);
       setDragOverItemId(null);
       return;
     }
-
-    // Reorder items
     const newItems = [...sortedItems];
     const [draggedItem] = newItems.splice(draggedIndex, 1);
     newItems.splice(targetIndex, 0, draggedItem);
-
     reorderQuickAccess(newItems);
     setDraggedItemId(null);
     setDragOverItemId(null);
@@ -274,9 +240,7 @@ export const Sidebar: React.FC = () => {
     setDragOverItemId(null);
   };
 
-  // File drop handlers for sidebar items
   const handleFileDragOver = useCallback((e: React.DragEvent, targetPath: string) => {
-    // Check if this is a file drag from XPlorer
     if (e.dataTransfer.types.includes('application/x-xplorer-files')) {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
@@ -291,19 +255,14 @@ export const Sidebar: React.FC = () => {
   const handleFileDrop = useCallback(async (e: React.DragEvent, targetPath: string) => {
     e.preventDefault();
     setDropTargetPath(null);
-
     const xplorerData = e.dataTransfer.getData('application/x-xplorer-files');
     if (!xplorerData) return;
-
     try {
       const paths = JSON.parse(xplorerData) as string[];
-
-      // Don't move if dropping on itself or a child
       const isInvalidTarget = paths.some(
         (p) => p === targetPath || targetPath.startsWith(p + '\\')
       );
       if (isInvalidTarget) return;
-
       await window.xplorer.request('fs.move', {
         sources: paths,
         destination: targetPath,
@@ -314,7 +273,6 @@ export const Sidebar: React.FC = () => {
     }
   }, [triggerRefresh]);
 
-  // Render Quick Access section
   const renderQuickAccessSection = () => {
     if (!isSectionVisible('quickAccess')) return null;
 
@@ -418,26 +376,28 @@ export const Sidebar: React.FC = () => {
 
         {expandedSections.quickAccess && (
           <div className="sidebar-section-content">
-            {visibleQuickAccess.map((item) => (
-              <button
-                key={item.id}
-                className={`sidebar-item${dropTargetPath === item.path ? ' drop-target' : ''}`}
-                onClick={() => handleNavigate(item.path)}
-                onDragOver={(e) => handleFileDragOver(e, item.path)}
-                onDragLeave={handleFileDragLeave}
-                onDrop={(e) => handleFileDrop(e, item.path)}
-              >
-                {getIcon(item.icon)}
-                <span>{item.name}</span>
-              </button>
-            ))}
+            {visibleQuickAccess.map((item) => {
+              const isActive = currentPath === item.path;
+              return (
+                <button
+                  key={item.id}
+                  className={`sidebar-item${dropTargetPath === item.path ? ' drop-target' : ''}${isActive ? ' active' : ''}`}
+                  onClick={() => handleNavigate(item.path)}
+                  onDragOver={(e) => handleFileDragOver(e, item.path)}
+                  onDragLeave={handleFileDragLeave}
+                  onDrop={(e) => handleFileDrop(e, item.path)}
+                >
+                  {getIcon(item.icon)}
+                  <span>{item.name}</span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
     );
   };
 
-  // Render This PC section
   const renderThisPCSection = () => {
     if (!isSectionVisible('thisPC')) return null;
 
@@ -460,10 +420,11 @@ export const Sidebar: React.FC = () => {
           <div className="sidebar-section-content">
             {drives.map((drive) => {
               const drivePath = drive.letter + '\\';
+              const isActive = currentPath === drivePath;
               return (
                 <button
                   key={drive.letter}
-                  className={`sidebar-item${dropTargetPath === drivePath ? ' drop-target' : ''}`}
+                  className={`sidebar-item${dropTargetPath === drivePath ? ' drop-target' : ''}${isActive ? ' active' : ''}`}
                   onClick={() => handleNavigate(drivePath)}
                   onDragOver={(e) => handleFileDragOver(e, drivePath)}
                   onDragLeave={handleFileDragLeave}
@@ -482,7 +443,6 @@ export const Sidebar: React.FC = () => {
     );
   };
 
-  // Render custom section
   const renderCustomSection = (section: CustomSidebarSection) => {
     if (!isSectionVisible(section.id)) return null;
 
@@ -578,19 +538,22 @@ export const Sidebar: React.FC = () => {
                 No items yet
               </div>
             ) : (
-              section.items.map((item) => (
-                <button
-                  key={item.id}
-                  className={`sidebar-item${dropTargetPath === item.path ? ' drop-target' : ''}`}
-                  onClick={() => handleNavigate(item.path)}
-                  onDragOver={(e) => handleFileDragOver(e, item.path)}
-                  onDragLeave={handleFileDragLeave}
-                  onDrop={(e) => handleFileDrop(e, item.path)}
-                >
-                  <Folder size={16} />
-                  <span>{item.name}</span>
-                </button>
-              ))
+              section.items.map((item) => {
+                const isActive = currentPath === item.path;
+                return (
+                  <button
+                    key={item.id}
+                    className={`sidebar-item${dropTargetPath === item.path ? ' drop-target' : ''}${isActive ? ' active' : ''}`}
+                    onClick={() => handleNavigate(item.path)}
+                    onDragOver={(e) => handleFileDragOver(e, item.path)}
+                    onDragLeave={handleFileDragLeave}
+                    onDrop={(e) => handleFileDrop(e, item.path)}
+                  >
+                    <Folder size={16} />
+                    <span>{item.name}</span>
+                  </button>
+                );
+              })
             )}
           </div>
         )}
@@ -598,7 +561,6 @@ export const Sidebar: React.FC = () => {
     );
   };
 
-  // Render section based on ID
   const renderSection = (sectionId: string) => {
     if (sectionId === 'quickAccess') {
       return renderQuickAccessSection();
@@ -617,7 +579,7 @@ export const Sidebar: React.FC = () => {
     <aside className="sidebar">
       {/* Home Button */}
       <button
-        className="sidebar-item sidebar-home-button"
+        className={`sidebar-item sidebar-home-button${currentPath === HOME_PATH ? ' active' : ''}`}
         onClick={() => handleNavigate(HOME_PATH)}
       >
         <Home size={16} />

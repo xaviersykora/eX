@@ -1,2 +1,2 @@
-export * from './file';
-export * from './ipc';
+// Shared constants
+export const HOME_PATH = 'Home';

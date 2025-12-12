@@ -4,8 +4,8 @@
   height: 100%;
   width: 100%;
   flex: 1;
-  padding-left: 8px;
-  -webkit-app-region: drag;
+  /* Custom drag handling - no native drag */
+  cursor: default;
 }
 
 .tabbar-tabs {
@@ -13,7 +13,6 @@
   align-items: stretch;
   overflow-x: auto;
   overflow-y: hidden;
-  -webkit-app-region: no-drag;
 }
 
 .tabbar-tabs::-webkit-scrollbar {
@@ -76,16 +75,52 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
+  width: 46px;
   height: 100%;
   color: var(--text-secondary);
-  -webkit-app-region: no-drag;
-  transition: background-color var(--transition-fast), color var(--transition-fast);
+  transition: all var(--transition-fast);
+  position: relative;
 }
 
 .tabbar-new:hover {
   background-color: var(--bg-hover);
   color: var(--text-primary);
+}
+
+/* Glass style add tab button - matches window controls */
+[data-ui-style="glass"] .tabbar-new {
+  background-color: transparent;
+}
+
+[data-ui-style="glass"] .tabbar-new::before {
+  content: '';
+  position: absolute;
+  inset: 6px 8px;
+  border-radius: 6px;
+  background-color: transparent;
+  transition: all var(--transition-fast);
+}
+
+[data-ui-style="glass"] .tabbar-new:hover::before {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-ui-style="glass"] .tabbar-new:hover {
+  background-color: transparent;
+  color: var(--text-primary);
+}
+
+[data-ui-style="glass"] .tabbar-new svg {
+  filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.3));
+}
+
+[data-ui-style="glass"] .tabbar-new:active::before {
+  transform: scale(0.95);
+}
+
+.tabbar-spacer {
+  flex: 1;
+  min-width: 20px;
 }
 
 /* Tab dragging states */

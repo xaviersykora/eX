@@ -174,10 +174,12 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     );
 
     if (hasArchive && isSingleSelection) {
+      // Get archive name without extension for extract folder name
+      const archiveName = files[0].name.replace(/\.[^/.]+$/, '');
       sevenZipSubmenu.push(
         { id: 'separator-7z', label: '', separator: true },
         { id: '7z-open-archive', label: 'Open archive', icon: <FolderOpen size={16} /> },
-        { id: '7z-extract-here', label: 'Extract here', icon: <Archive size={16} /> },
+        { id: '7z-extract-to-folder', label: `Extract to "${archiveName}\\"`, icon: <Archive size={16} /> },
       );
     }
   }
@@ -234,7 +236,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
           key={item.id}
           className="context-menu-item-wrapper"
           onMouseEnter={() => setActiveSubmenu(item.id)}
-          onMouseLeave={() => setActiveSubmenu(null)}
+          // No onMouseLeave - submenu stays open once triggered
         >
           <div
             className={`context-menu-item has-submenu ${activeSubmenu === item.id ? 'submenu-open' : ''}`}
@@ -271,12 +273,13 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       );
     }
 
-    // Regular item
+    // Regular item - close any open submenu when hovering
     return (
       <button
         key={item.id}
         className={`context-menu-item ${item.danger ? 'danger' : ''} ${item.disabled ? 'disabled' : ''}`}
         onClick={() => !item.disabled && handleAction(item.id)}
+        onMouseEnter={() => setActiveSubmenu(null)}
         disabled={item.disabled}
       >
         <span className="context-menu-icon">{item.icon}</span>
