@@ -13,6 +13,9 @@ let tray: Tray | null = null;
 let closeToTrayEnabled = false;
 let trayRestoreBehavior: 'restore' | 'newWindow' = 'newWindow';
 
+// Pre-cached drag icon for better performance
+let cachedDragIcon: Electron.NativeImage | null = null;
+
 // Check if we're in development mode
 const isDev = !app.isPackaged;
 
@@ -254,6 +257,11 @@ const startMinimized = process.argv.includes('--start-minimized');
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 app.whenReady().then(async () => {
+  // Pre-cache the drag icon for better performance during drag operations
+  cachedDragIcon = nativeImage.createFromDataURL(
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAADcSURBVDiNpZMxDoJAEEXfLoReQGNlZ2ejNdhR0NCQeAIvYekNPIKlrY2VHsBGE2NB4QkstLGy0Z9wwLjsJmx4YTKZ/+fP7gwYaUAE3IGN8PcGNEAt/RvYABuwk/4TmI4JuIgAMBRB4CBtGSB0gKBwdQi4AvOhACCDwMIAMvg6iRBCAa8RoFfgCqy8BLwBn6c7E/AA1l4CO0AAj6drBniJt0ng5O0CroB3FXAC3kL/G6iNBEJgB+yBnQiEwB54CoED8B4B6jXwA5w/AT/gVK8B/4Dz1wB/oFKvgZ/A5QuSUEu7jj2KLwAAAABJRU5ErkJggg=='
+  );
+
   if (startMinimized) {
     // Start minimized to tray - initialize backend and tray but don't create window
     console.log('Starting minimized to tray...');
@@ -378,12 +386,27 @@ ipcMain.on('tabs:navigateTo', (_event, path: string) => {
   GlobalState.tabState.navigateTo(path);
 });
 
+// Navigate a specific tab by ID (tab-safe navigation)
+ipcMain.on('tabs:navigateTab', (_event, tabId: string, path: string) => {
+  GlobalState.tabState.navigateTab(tabId, path);
+});
+
 ipcMain.on('tabs:goBack', () => {
   GlobalState.tabState.goBack();
 });
 
+// Go back in a specific tab's history (tab-safe navigation)
+ipcMain.on('tabs:goBackTab', (_event, tabId: string) => {
+  GlobalState.tabState.goBackTab(tabId);
+});
+
 ipcMain.on('tabs:goForward', () => {
   GlobalState.tabState.goForward();
+});
+
+// Go forward in a specific tab's history (tab-safe navigation)
+ipcMain.on('tabs:goForwardTab', (_event, tabId: string) => {
+  GlobalState.tabState.goForwardTab(tabId);
 });
 
 ipcMain.handle('tabs:getState', (event) => {
@@ -421,20 +444,15 @@ ipcMain.on('drag:start', (event, filePaths: string[]) => {
   const validPaths = filePaths.filter((p) => existsSync(p));
   if (validPaths.length === 0) return;
 
-  // Try to create a drag icon, fall back to a generated one
-  let icon = nativeImage.createFromPath(join(__dirname, '../resources/file-drag.png'));
-
-  if (icon.isEmpty()) {
-    // Create a simple placeholder icon (16x16 transparent with a file shape)
-    icon = nativeImage.createEmpty();
-  }
+  // Use the pre-cached icon for immediate drag start (no async delay)
+  const icon = cachedDragIcon || nativeImage.createEmpty();
 
   try {
-    // Use type assertion as 'files' is valid but TypeScript definitions may be outdated
+    // Start native drag immediately with cached icon
     event.sender.startDrag({
       file: validPaths[0],
       files: validPaths,
-      icon: icon.isEmpty() ? nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAADcSURBVDiNpZMxDoJAEEXfLoReQGNlZ2ejNdhR0NCQeAIvYekNPIKlrY2VHsBGE2NB4QkstLGy0Z9wwLjsJmx4YTKZ/+fP7gwYaUAE3IGN8PcGNEAt/RvYABuwk/4TmI4JuIgAMBRB4CBtGSB0gKBwdQi4AvOhACCDwMIAMvg6iRBCAa8RoFfgCqy8BLwBn6c7E/AA1l4CO0AAj6drBniJt0ng5O0CroB3FXAC3kL/G6iNBEJgB+yBnQiEwB54CoED8B4B6jXwA5w/AT/gVK8B/4Dz1wB/oFKvgZ/A5QuSUEu7jj2KLwAAAABJRU5ErkJggg==') : icon,
+      icon: icon,
     } as Electron.Item);
   } catch (error) {
     console.error('Failed to start drag:', error);

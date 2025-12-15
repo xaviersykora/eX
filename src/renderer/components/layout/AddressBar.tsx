@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { ChevronRight, Search, X, Loader2, Home } from 'lucide-react';
 import { useSharedState } from '../../contexts/StateProvider';
 import { useFileStore } from '../../store/fileStore';
@@ -17,7 +18,16 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSearchedQueryRef = useRef<string>('');
-  const { tabs: tabActions } = useSharedState();
+  const searchAbortControllerRef = useRef<AbortController | null>(null);
+  const searchOperationIdRef = useRef<string | null>(null);
+  const { tabState, tabs: tabActions } = useSharedState();
+  const { activeTabId } = tabState;
+
+  // Track active tab ID in a ref for async operation verification
+  const activeTabIdRef = useRef(activeTabId);
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
   const {
     setLoading,
     setError,
@@ -53,7 +63,7 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
     }
   }, [isEditing]);
 
-  // Perform the actual search
+  // Perform the actual search with cancellation support
   const performSearch = useCallback(async (query: string, force: boolean = false) => {
     const trimmedQuery = query.trim();
     if (!trimmedQuery || !path) return;
@@ -62,11 +72,33 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
     if (!force && lastSearchedQueryRef.current === trimmedQuery) return;
     lastSearchedQueryRef.current = trimmedQuery;
 
+    // Capture the tab ID at the start - operations must verify this hasn't changed
+    const tabIdAtStart = activeTabIdRef.current;
+
     // Home page: filter recent files instead of filesystem search
     if (path === HOME_PATH) {
       setHomeSearchQuery(trimmedQuery);
       return;
     }
+
+    // Cancel any previous search operation
+    if (searchAbortControllerRef.current) {
+      searchAbortControllerRef.current.abort();
+      // Cancel the backend operation too
+      if (searchOperationIdRef.current) {
+        window.xplorer.request('cancel', { operation_id: searchOperationIdRef.current });
+      }
+    }
+
+    // Spawn new "thread" for this search
+    const abortController = new AbortController();
+    searchAbortControllerRef.current = abortController;
+    const signal = abortController.signal;
+    const operationId = uuidv4();
+    searchOperationIdRef.current = operationId;
+
+    // Helper to check if we should still update state
+    const isStillValid = () => !signal.aborted && activeTabIdRef.current === tabIdAtStart;
 
     const searchId = startSearch(trimmedQuery);
     setLoading(true);
@@ -75,24 +107,33 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
         path: path,
         query: trimmedQuery,
         recursive: true,
+        operation_id: operationId,
       });
+
+      // Check if this search was cancelled or tab changed
+      if (!isStillValid()) {
+        return; // Silently discard stale results - wrong tab or cancelled
+      }
+
       if (response.success && response.data) {
         setSearchResults(searchId, response.data as any[]);
       } else {
         const currentSearchId = useFileStore.getState().search.searchId;
-        if (currentSearchId === searchId) {
+        if (currentSearchId === searchId && isStillValid()) {
           setError(response.error?.message || 'Search failed');
           cancelSearch();
         }
       }
     } catch (error) {
       const currentSearchId = useFileStore.getState().search.searchId;
-      if (currentSearchId === searchId) {
+      if (currentSearchId === searchId && isStillValid()) {
         setError(error instanceof Error ? error.message : 'Search failed');
         cancelSearch();
       }
     } finally {
-      setLoading(false);
+      if (isStillValid()) {
+        setLoading(false);
+      }
     }
   }, [path, startSearch, setLoading, setSearchResults, setError, cancelSearch, setHomeSearchQuery]);
 
@@ -136,13 +177,19 @@ export const AddressBar: React.FC<AddressBarProps> = ({ path }) => {
 
   const handleBreadcrumbClick = (index: number) => {
     const newPath = pathParts.slice(0, index + 1).join('\\') + '\\';
-    tabActions.navigateTo(newPath);
+    const tabId = activeTabIdRef.current;
+    if (tabId) {
+      tabActions.navigateTab(tabId, newPath);
+    }
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (editValue.trim()) {
-      tabActions.navigateTo(editValue.trim());
+      const tabId = activeTabIdRef.current;
+      if (tabId) {
+        tabActions.navigateTab(tabId, editValue.trim());
+      }
     }
     setIsEditing(false);
   };

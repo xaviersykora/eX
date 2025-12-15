@@ -67,6 +67,13 @@ export const Sidebar: React.FC = () => {
   const customSectionMenuRef = useRef<HTMLDivElement>(null);
 
   const { tabs: tabActions, tabState } = useSharedState();
+  const { activeTabId } = tabState;
+
+  // Track active tab ID in a ref for navigation
+  const activeTabIdRef = useRef(activeTabId);
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
 
   // Get current path from active tab
   const currentPath = (() => {
@@ -170,7 +177,10 @@ export const Sidebar: React.FC = () => {
   };
 
   const handleNavigate = (path: string) => {
-    tabActions.navigateTo(path);
+    const tabId = activeTabIdRef.current;
+    if (tabId) {
+      tabActions.navigateTab(tabId, path);
+    }
   };
 
   const handleAddQuickAccess = () => {

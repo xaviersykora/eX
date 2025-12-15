@@ -139,4 +139,7 @@ ACTIONS = {
     "sevenzip.addToArchiveDialog": "handle_sevenzip_add_dialog",
     "sevenzip.openArchive": "handle_sevenzip_open",
     "sevenzip.extract": "handle_sevenzip_extract",
+
+    # Operation Control
+    "cancel": "handle_cancel",
 }

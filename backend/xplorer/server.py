@@ -38,10 +38,32 @@ class XPServer:
         self.publisher: zmq.asyncio.Socket | None = None
         self.running = False
 
+        # Cancellation token registry: {operation_id: asyncio.Event}
+        self._cancellation_tokens: dict[str, asyncio.Event] = {}
+
         # Services
         self.file_service = FileService()
         self.watch_service = WatchService(self._publish_event)
         self.theme_service = ThemeService()
+
+    def _create_cancellation_token(self, operation_id: str) -> asyncio.Event:
+        """Create a cancellation token for an operation."""
+        token = asyncio.Event()
+        self._cancellation_tokens[operation_id] = token
+        return token
+
+    def _cancel_operation(self, operation_id: str) -> bool:
+        """Cancel an operation by ID."""
+        token = self._cancellation_tokens.pop(operation_id, None)
+        if token:
+            token.set()  # Signal cancellation
+            logger.debug(f"Cancelled operation: {operation_id}")
+            return True
+        return False
+
+    def _cleanup_token(self, operation_id: str):
+        """Remove token after operation completes."""
+        self._cancellation_tokens.pop(operation_id, None)
 
     async def start(self):
         """Start the server."""
@@ -209,9 +231,27 @@ class XPServer:
             except Exception as e:
                 logger.error(f"Failed to publish event: {e}")
 
+    # Operation Control Handler
+    async def handle_cancel(self, params: dict) -> dict:
+        """Handle operation cancellation request."""
+        operation_id = params.get("operation_id")
+        cancelled = self._cancel_operation(operation_id) if operation_id else False
+        return {"cancelled": cancelled, "operation_id": operation_id}
+
     # File System Handlers
     async def handle_fs_list(self, params: dict) -> list[dict]:
-        return await self.file_service.list_directory(params.get("path", ""))
+        path = params.get("path", "")
+        operation_id = params.get("operation_id")
+
+        cancel_token = None
+        if operation_id:
+            cancel_token = self._create_cancellation_token(operation_id)
+
+        try:
+            return await self.file_service.list_directory(path, cancel_token)
+        finally:
+            if operation_id:
+                self._cleanup_token(operation_id)
 
     async def handle_fs_info(self, params: dict) -> dict:
         return await self.file_service.get_file_info(params.get("path", ""))
@@ -253,7 +293,18 @@ class XPServer:
         return await self.file_service.get_folder_stats(params.get("path", ""))
 
     async def handle_fs_folder_size(self, params: dict) -> dict:
-        return await self.file_service.get_folder_size(params.get("path", ""))
+        path = params.get("path", "")
+        operation_id = params.get("operation_id")
+
+        cancel_token = None
+        if operation_id:
+            cancel_token = self._create_cancellation_token(operation_id)
+
+        try:
+            return await self.file_service.get_folder_size(path, cancel_token)
+        finally:
+            if operation_id:
+                self._cleanup_token(operation_id)
 
     async def handle_fs_drives(self, params: dict) -> list[dict]:
         return await self.file_service.get_drives()
@@ -269,11 +320,20 @@ class XPServer:
         return {"unwatched": path}
 
     async def handle_fs_search(self, params: dict) -> list[dict]:
-        return await self.file_service.search(
-            params.get("path", ""),
-            params.get("query", ""),
-            params.get("recursive", True),
-        )
+        path = params.get("path", "")
+        query = params.get("query", "")
+        recursive = params.get("recursive", True)
+        operation_id = params.get("operation_id")
+
+        cancel_token = None
+        if operation_id:
+            cancel_token = self._create_cancellation_token(operation_id)
+
+        try:
+            return await self.file_service.search(path, query, recursive, cancel_token)
+        finally:
+            if operation_id:
+                self._cleanup_token(operation_id)
 
     # Clipboard Handlers
     async def handle_clipboard_copy(self, params: dict) -> dict:

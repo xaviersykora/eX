@@ -207,13 +207,20 @@ const RecentFileContextMenu: React.FC<RecentFileContextMenuProps> = ({ x, y, fil
 };
 
 export const HomePage: React.FC = () => {
-  const { tabs: tabActions } = useSharedState();
+  const { tabState, tabs: tabActions } = useSharedState();
+  const { activeTabId } = tabState;
   const { quickAccessItems, customFileTypes, defaultTypeIcons, promptBeforeOpen } = useSettingsStore();
   const { setHomeSelectedFile, clearSelection, homeSearchQuery } = useFileStore();
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([]);
   const [loadingRecent, setLoadingRecent] = useState(true);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: RecentFile } | null>(null);
   const [selectedRecentFile, setSelectedRecentFile] = useState<string | null>(null);
+
+  // Track active tab ID in a ref for navigation
+  const activeTabIdRef = useRef(activeTabId);
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
 
   // Filter recent files based on search query
   const filteredRecentFiles = React.useMemo(() => {
@@ -253,7 +260,10 @@ export const HomePage: React.FC = () => {
   const visibleQuickAccess = [...quickAccessItems].filter((item) => item.visible).sort((a, b) => a.order - b.order);
 
   const handleNavigate = (path: string) => {
-    tabActions.navigateTo(path);
+    const tabId = activeTabIdRef.current;
+    if (tabId) {
+      tabActions.navigateTab(tabId, path);
+    }
   };
 
   const handleOpenFile = useCallback(async (path: string, fileName?: string) => {
@@ -294,9 +304,17 @@ export const HomePage: React.FC = () => {
 
   const handleRecentFileDragStart = useCallback((e: React.DragEvent, file: RecentFile) => {
     const paths = [file.path];
+
+    // Set data for internal drops
     e.dataTransfer.effectAllowed = 'copyMove';
     e.dataTransfer.setData('application/x-xplorer-files', JSON.stringify(paths));
+
+    // For external apps, use the file:// protocol URIs (text/uri-list format)
+    const fileUri = `file:///${file.path.replace(/\\/g, '/')}`;
+    e.dataTransfer.setData('text/uri-list', fileUri);
     e.dataTransfer.setData('text/plain', file.path);
+
+    // Trigger native drag for external app compatibility
     window.xplorer.startDrag(paths);
   }, []);
 
@@ -338,7 +356,10 @@ export const HomePage: React.FC = () => {
         break;
       case 'open-file-location':
         const parentPath = file.path.substring(0, file.path.lastIndexOf('\\'));
-        tabActions.navigateTo(parentPath);
+        const tabId = activeTabIdRef.current;
+        if (tabId) {
+          tabActions.navigateTab(tabId, parentPath);
+        }
         break;
       case 'copy-path':
         await navigator.clipboard.writeText(file.path);

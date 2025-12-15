@@ -239,6 +239,7 @@ export const InfoPanel: React.FC = () => {
   const { getSelectedFiles, files, toggleInfoPanel, triggerRefresh, homeSelectedFile } = useFileStore();
   const { measureFolderSize, customFileTypes, defaultTypeIcons, fileCustomizations } = useSettingsStore();
   const { tabState } = useSharedState();
+  const { activeTabId } = tabState;
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
@@ -253,6 +254,16 @@ export const InfoPanel: React.FC = () => {
   const [loadingCurrentDirStats, setLoadingCurrentDirStats] = useState(false);
   const [loadingCurrentDirSize, setLoadingCurrentDirSize] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // AbortController refs for cancellation
+  const folderSizeAbortRef = useRef<AbortController | null>(null);
+  const currentDirAbortRef = useRef<AbortController | null>(null);
+  const folderStatsAbortRef = useRef<AbortController | null>(null);
+
+  // Track active tab ID in a ref for async operation verification
+  const activeTabIdRef = useRef(activeTabId);
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
 
   const selectedFiles = getSelectedFiles();
   const singleFile = selectedFiles.length === 1 ? selectedFiles[0] : null;
@@ -277,57 +288,115 @@ export const InfoPanel: React.FC = () => {
 
   // Fetch folder stats when a folder is selected
   useEffect(() => {
+    // Cancel previous request
+    if (folderStatsAbortRef.current) {
+      folderStatsAbortRef.current.abort();
+    }
+
     if (singleFile && singleFile.isDirectory) {
+      const abortController = new AbortController();
+      folderStatsAbortRef.current = abortController;
+      const tabIdAtStart = activeTabIdRef.current;
+
+      // Helper to check if we should still update state
+      const isStillValid = () => !abortController.signal.aborted && activeTabIdRef.current === tabIdAtStart;
+
       setLoadingStats(true);
       setFolderStats(null);
 
       window.xplorer.request('fs.folderStats', { path: singleFile.path })
         .then((response) => {
+          if (!isStillValid()) return;
           if (response.success && response.data) {
             setFolderStats(response.data as FolderStats);
           }
         })
         .catch((error) => {
-          console.error('Failed to fetch folder stats:', error);
+          if (isStillValid()) {
+            console.error('Failed to fetch folder stats:', error);
+          }
         })
         .finally(() => {
-          setLoadingStats(false);
+          if (isStillValid()) {
+            setLoadingStats(false);
+          }
         });
     } else {
       setFolderStats(null);
     }
+
+    return () => {
+      if (folderStatsAbortRef.current) {
+        folderStatsAbortRef.current.abort();
+      }
+    };
   }, [singleFile?.path, singleFile?.isDirectory]);
 
   // Fetch folder size when measureFolderSize is enabled
   useEffect(() => {
+    // Cancel previous request
+    if (folderSizeAbortRef.current) {
+      folderSizeAbortRef.current.abort();
+    }
+
     if (singleFile && singleFile.isDirectory && measureFolderSize) {
+      const abortController = new AbortController();
+      folderSizeAbortRef.current = abortController;
+      const tabIdAtStart = activeTabIdRef.current;
+
+      // Helper to check if we should still update state
+      const isStillValid = () => !abortController.signal.aborted && activeTabIdRef.current === tabIdAtStart;
+
       setLoadingSize(true);
       setFolderSize(null);
 
       window.xplorer.request('fs.folderSize', { path: singleFile.path })
         .then((response) => {
-          if (response.success && response.data) {
+          if (!isStillValid()) return;
+          if (response.success && response.data && !(response.data as any).cancelled) {
             const data = response.data as { path: string; size: number };
             setFolderSize(data.size);
           }
         })
         .catch((error) => {
-          console.error('Failed to fetch folder size:', error);
+          if (isStillValid()) {
+            console.error('Failed to fetch folder size:', error);
+          }
         })
         .finally(() => {
-          setLoadingSize(false);
+          if (isStillValid()) {
+            setLoadingSize(false);
+          }
         });
     } else {
       setFolderSize(null);
     }
+
+    return () => {
+      if (folderSizeAbortRef.current) {
+        folderSizeAbortRef.current.abort();
+      }
+    };
   }, [singleFile?.path, singleFile?.isDirectory, measureFolderSize]);
 
   // Fetch current directory info when no selection (for showing directory details)
   useEffect(() => {
+    // Cancel previous requests
+    if (currentDirAbortRef.current) {
+      currentDirAbortRef.current.abort();
+    }
+
     const hasSelection = selectedFiles.length > 0;
     const hasHomeSelection = homeSelectedFile !== null;
 
     if (!hasSelection && !hasHomeSelection && currentPath && currentPath !== 'Home') {
+      const abortController = new AbortController();
+      currentDirAbortRef.current = abortController;
+      const tabIdAtStart = activeTabIdRef.current;
+
+      // Helper to check if we should still update state
+      const isStillValid = () => !abortController.signal.aborted && activeTabIdRef.current === tabIdAtStart;
+
       setLoadingCurrentDirStats(true);
       setCurrentDirStats(null);
       setCurrentDirInfo(null);
@@ -335,27 +404,35 @@ export const InfoPanel: React.FC = () => {
       // Fetch folder stats
       window.xplorer.request('fs.folderStats', { path: currentPath })
         .then((response) => {
+          if (!isStillValid()) return;
           if (response.success && response.data) {
             setCurrentDirStats(response.data as FolderStats);
           }
         })
         .catch((error) => {
-          console.error('Failed to fetch current dir stats:', error);
+          if (isStillValid()) {
+            console.error('Failed to fetch current dir stats:', error);
+          }
         })
         .finally(() => {
-          setLoadingCurrentDirStats(false);
+          if (isStillValid()) {
+            setLoadingCurrentDirStats(false);
+          }
         });
 
       // Fetch directory metadata (created/modified dates)
       window.xplorer.request('fs.stat', { path: currentPath })
         .then((response) => {
+          if (!isStillValid()) return;
           if (response.success && response.data) {
             const data = response.data as { createdAt: number; modifiedAt: number };
             setCurrentDirInfo({ createdAt: data.createdAt, modifiedAt: data.modifiedAt });
           }
         })
         .catch((error) => {
-          console.error('Failed to fetch current dir info:', error);
+          if (isStillValid()) {
+            console.error('Failed to fetch current dir info:', error);
+          }
         });
 
       // Fetch size if enabled
@@ -365,16 +442,21 @@ export const InfoPanel: React.FC = () => {
 
         window.xplorer.request('fs.folderSize', { path: currentPath })
           .then((response) => {
-            if (response.success && response.data) {
+            if (!isStillValid()) return;
+            if (response.success && response.data && !(response.data as any).cancelled) {
               const data = response.data as { path: string; size: number };
               setCurrentDirSize(data.size);
             }
           })
           .catch((error) => {
-            console.error('Failed to fetch current dir size:', error);
+            if (isStillValid()) {
+              console.error('Failed to fetch current dir size:', error);
+            }
           })
           .finally(() => {
-            setLoadingCurrentDirSize(false);
+            if (isStillValid()) {
+              setLoadingCurrentDirSize(false);
+            }
           });
       }
     } else {
@@ -382,6 +464,12 @@ export const InfoPanel: React.FC = () => {
       setCurrentDirSize(null);
       setCurrentDirInfo(null);
     }
+
+    return () => {
+      if (currentDirAbortRef.current) {
+        currentDirAbortRef.current.abort();
+      }
+    };
   }, [currentPath, selectedFiles.length, homeSelectedFile, measureFolderSize]);
 
   // Focus input when editing starts

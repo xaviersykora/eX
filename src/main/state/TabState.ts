@@ -122,15 +122,21 @@ export class TabState {
   };
 
   public navigateTo = (path: string) => {
-    const { tabs, activeTabId } = this.state;
+    const { activeTabId } = this.state;
     if (!activeTabId) return;
+    // Delegate to navigateTab with the active tab
+    this.navigateTab(activeTabId, path);
+  };
 
-    const tabIndex = tabs.findIndex((t) => t.id === activeTabId);
+  // Navigate a specific tab by ID (tab-safe navigation)
+  public navigateTab = (tabId: string, path: string) => {
+    const { tabs } = this.state;
+    const tabIndex = tabs.findIndex((t) => t.id === tabId);
     if (tabIndex === -1) return;
 
     const tab = tabs[tabIndex];
     const newHistory = [...tab.history.slice(0, tab.historyIndex + 1), path];
-    
+
     const updatedTab: Tab = {
       ...tab,
       path,
@@ -146,10 +152,16 @@ export class TabState {
   };
 
   public goBack = () => {
-    const { tabs, activeTabId } = this.state;
+    const { activeTabId } = this.state;
     if (!activeTabId) return;
+    // Delegate to tab-specific method
+    this.goBackTab(activeTabId);
+  };
 
-    const tabIndex = tabs.findIndex((t) => t.id === activeTabId);
+  // Go back in a specific tab's history (tab-safe navigation)
+  public goBackTab = (tabId: string) => {
+    const { tabs } = this.state;
+    const tabIndex = tabs.findIndex((t) => t.id === tabId);
     if (tabIndex === -1 || tabs[tabIndex].historyIndex <= 0) return;
 
     const tab = tabs[tabIndex];
@@ -164,10 +176,16 @@ export class TabState {
   };
 
   public goForward = () => {
-    const { tabs, activeTabId } = this.state;
+    const { activeTabId } = this.state;
     if (!activeTabId) return;
+    // Delegate to tab-specific method
+    this.goForwardTab(activeTabId);
+  };
 
-    const tabIndex = tabs.findIndex((t) => t.id === activeTabId);
+  // Go forward in a specific tab's history (tab-safe navigation)
+  public goForwardTab = (tabId: string) => {
+    const { tabs } = this.state;
+    const tabIndex = tabs.findIndex((t) => t.id === tabId);
     if (tabIndex === -1 || tabs[tabIndex].historyIndex >= tabs[tabIndex].history.length - 1) return;
 
     const tab = tabs[tabIndex];

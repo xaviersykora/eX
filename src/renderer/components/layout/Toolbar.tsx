@@ -51,6 +51,12 @@ export const Toolbar: React.FC = () => {
   const [addMenuPos, setAddMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [sortMenuPos, setSortMenuPos] = useState<{ x: number; y: number } | null>(null);
 
+  // Track active tab ID in a ref for navigation
+  const activeTabIdRef = useRef(activeTabId);
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
+
   const activeTab = tabs.find((t) => t.id === activeTabId);
 
   const canGoBack = () => {
@@ -80,12 +86,26 @@ export const Toolbar: React.FC = () => {
 
   const handleGoUp = () => {
     if (!activeTab) return;
+    const tabId = activeTabIdRef.current;
+    if (!tabId) return;
     const parts = activeTab.path.split('\\').filter(Boolean);
     if (parts.length > 1) {
       parts.pop();
       const parentPath = parts.join('\\') + '\\';
-      tabActions.navigateTo(parentPath);
+      tabActions.navigateTab(tabId, parentPath);
     }
+  };
+
+  const handleGoBack = () => {
+    const tabId = activeTabIdRef.current;
+    if (!tabId) return;
+    tabActions.goBackTab(tabId);
+  };
+
+  const handleGoForward = () => {
+    const tabId = activeTabIdRef.current;
+    if (!tabId) return;
+    tabActions.goForwardTab(tabId);
   };
 
   const handleRefresh = () => {
@@ -276,7 +296,7 @@ export const Toolbar: React.FC = () => {
       <div className="toolbar-group">
         <button
           className="toolbar-button"
-          onClick={tabActions.goBack}
+          onClick={handleGoBack}
           disabled={!canGoBack()}
           title="Back (Alt+Left)"
         >
@@ -284,7 +304,7 @@ export const Toolbar: React.FC = () => {
         </button>
         <button
           className="toolbar-button"
-          onClick={tabActions.goForward}
+          onClick={handleGoForward}
           disabled={!canGoForward()}
           title="Forward (Alt+Right)"
         >

@@ -9,7 +9,7 @@ import asyncio
 import shutil
 import mimetypes
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from concurrent.futures import ThreadPoolExecutor
 import logging
 
@@ -71,13 +71,18 @@ def _get_file_info(path: str) -> dict[str, Any]:
         raise
 
 
-def _list_directory(path: str) -> list[dict[str, Any]]:
-    """List directory contents."""
+def _list_directory(path: str, cancel_check: Callable[[], bool] | None = None) -> list[dict[str, Any]]:
+    """List directory contents with optional cancellation."""
     result = []
 
     try:
         with os.scandir(path) as entries:
             for entry in entries:
+                # Check cancellation periodically
+                if cancel_check and cancel_check():
+                    logger.debug(f"List directory cancelled for {path}")
+                    return []
+
                 try:
                     result.append(_get_file_info(entry.path))
                 except (OSError, PermissionError) as e:
@@ -259,17 +264,31 @@ def _create_directory(path: str) -> None:
 class FileService:
     """Service for file system operations."""
 
-    async def list_directory(self, path: str) -> list[dict[str, Any]]:
-        """List contents of a directory."""
+    async def list_directory(
+        self,
+        path: str,
+        cancel_token: asyncio.Event | None = None
+    ) -> list[dict[str, Any]]:
+        """List contents of a directory with optional cancellation."""
         if not path:
             raise ValueError("Path is required")
 
         loop = asyncio.get_event_loop()
 
+        # Create thread-safe cancellation check
+        def is_cancelled() -> bool:
+            return cancel_token.is_set() if cancel_token else False
+
         if USE_CYTHON:
-            return await loop.run_in_executor(_executor, fs_core.list_directory, path)
+            return await loop.run_in_executor(
+                _executor,
+                lambda: fs_core.list_directory(path)  # Cython doesn't support cancel yet
+            )
         else:
-            return await loop.run_in_executor(_executor, _list_directory, path)
+            return await loop.run_in_executor(
+                _executor,
+                lambda: _list_directory(path, is_cancelled)
+            )
 
     async def get_file_info(self, path: str) -> dict[str, Any]:
         """Get information about a file or directory."""
@@ -428,19 +447,40 @@ class FileService:
 
         return await loop.run_in_executor(_executor, do_count)
 
-    async def get_folder_size(self, path: str) -> dict[str, Any]:
-        """Get recursive folder size (total size of all contents)."""
+    async def get_folder_size(
+        self,
+        path: str,
+        cancel_token: asyncio.Event | None = None
+    ) -> dict[str, Any]:
+        """Get recursive folder size (total size of all contents) with cancellation."""
         if not path:
             raise ValueError("Path is required")
 
         loop = asyncio.get_event_loop()
 
+        # Create thread-safe cancellation check
+        def is_cancelled() -> bool:
+            return cancel_token.is_set() if cancel_token else False
+
         def do_calculate():
             total_size = 0
+            check_interval = 500  # Check cancellation every N files
+            count = 0
 
             try:
                 for root, dirs, files in os.walk(path):
+                    # Check cancellation at each directory
+                    if is_cancelled():
+                        logger.debug(f"Folder size calculation cancelled for {path}")
+                        return {"path": path, "size": 0, "cancelled": True}
+
                     for file in files:
+                        count += 1
+                        # Check cancellation periodically
+                        if count % check_interval == 0 and is_cancelled():
+                            logger.debug(f"Folder size calculation cancelled for {path}")
+                            return {"path": path, "size": 0, "cancelled": True}
+
                         try:
                             file_path = os.path.join(root, file)
                             total_size += os.path.getsize(file_path)
@@ -462,20 +502,43 @@ class FileService:
         else:
             return await loop.run_in_executor(_executor, _get_drives)
 
-    async def search(self, path: str, query: str, recursive: bool = True) -> list[dict[str, Any]]:
-        """Search for files."""
+    async def search(
+        self,
+        path: str,
+        query: str,
+        recursive: bool = True,
+        cancel_token: asyncio.Event | None = None
+    ) -> list[dict[str, Any]]:
+        """Search for files with cancellation support."""
         if not path or not query:
             raise ValueError("Path and query are required")
 
         loop = asyncio.get_event_loop()
 
+        # Create thread-safe cancellation check
+        def is_cancelled() -> bool:
+            return cancel_token.is_set() if cancel_token else False
+
         def do_search():
             results = []
             query_lower = query.lower()
+            check_interval = 100  # Check cancellation every N items
+            count = 0
 
             if recursive:
                 for root, dirs, files in os.walk(path):
+                    # Check cancellation at each directory
+                    if is_cancelled():
+                        logger.debug(f"Search cancelled for query '{query}' in {path}")
+                        return []
+
                     for name in dirs + files:
+                        count += 1
+                        # Check cancellation periodically
+                        if count % check_interval == 0 and is_cancelled():
+                            logger.debug(f"Search cancelled for query '{query}' in {path}")
+                            return results  # Return partial results
+
                         if query_lower in name.lower():
                             full_path = os.path.join(root, name)
                             try:
@@ -484,6 +547,11 @@ class FileService:
                                 continue
             else:
                 for entry in os.scandir(path):
+                    # Check cancellation
+                    if is_cancelled():
+                        logger.debug(f"Search cancelled for query '{query}' in {path}")
+                        return results
+
                     if query_lower in entry.name.lower():
                         try:
                             results.append(_get_file_info(entry.path))

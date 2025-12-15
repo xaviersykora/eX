@@ -10,8 +10,11 @@ interface StateContextType {
     close: (id: string) => void;
     setActive: (id: string) => void;
     navigateTo: (path: string) => void;
+    navigateTab: (tabId: string, path: string) => void;
     goBack: () => void;
+    goBackTab: (tabId: string) => void;
     goForward: () => void;
+    goForwardTab: (tabId: string) => void;
   };
 }
 
@@ -59,8 +62,11 @@ export const StateProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     close: (id: string) => window.xplorer.tabs.close(id),
     setActive: (id: string) => window.xplorer.tabs.setActive(id),
     navigateTo: (path: string) => window.xplorer.tabs.navigateTo(path),
+    navigateTab: (tabId: string, path: string) => window.xplorer.tabs.navigateTab(tabId, path),
     goBack: () => window.xplorer.tabs.goBack(),
+    goBackTab: (tabId: string) => window.xplorer.tabs.goBackTab(tabId),
     goForward: () => window.xplorer.tabs.goForward(),
+    goForwardTab: (tabId: string) => window.xplorer.tabs.goForwardTab(tabId),
   };
 
   const value = {

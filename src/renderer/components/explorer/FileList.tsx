@@ -178,6 +178,7 @@ const getFileType = (file: FileInfo): string => {
 export const FileList: React.FC<FileListProps> = ({ onOpen }) => {
   const { files, selectedIds, select, selectRange, selectAll, clearSelection, loading, error, sortConfig, setSortConfig, viewMode, getSelectedFiles, triggerRefresh, editingPath, setEditingPath, columnConfig, toggleColumn, thumbnailSize, iconSize, setPendingNewFolderPath, folderSizes, loadingFolderSizes, setFolderSize, setLoadingFolderSize, clearFolderSizes, search } = useFileStore();
   const { tabState, tabs: tabActions } = useSharedState();
+  const { activeTabId } = tabState;
   const { customFileTypes, defaultTypeIcons, columnWidths, setColumnWidth, measureFolderSize, fileCustomizations, getFileCustomization } = useSettingsStore();
   const { getEntry: getCachedSize, setEntry: setCachedSize, isValid: isCacheValid } = useFolderSizeCacheStore();
 
@@ -186,6 +187,12 @@ export const FileList: React.FC<FileListProps> = ({ onOpen }) => {
     const tab = tabs.find((t) => t.id === activeTabId);
     return tab?.path || '';
   }, [tabState]);
+
+  // Track active tab ID in a ref for async operation verification
+  const activeTabIdRef = useRef(activeTabId);
+  useEffect(() => {
+    activeTabIdRef.current = activeTabId;
+  }, [activeTabId]);
   
   const containerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -328,14 +335,33 @@ export const FileList: React.FC<FileListProps> = ({ onOpen }) => {
   const folderSizeQueueRef = useRef<string[]>([]);
   const isProcessingFolderSizeRef = useRef(false);
   const currentPathRef = useRef<string>('');
+  const folderSizeAbortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (!measureFolderSize) return;
+
+    // Capture the tab ID at the start - operations must verify this hasn't changed
+    const tabIdAtStart = activeTabIdRef.current;
+
+    // Cancel previous folder size operations when path changes
     if (currentPath !== currentPathRef.current) {
       currentPathRef.current = currentPath;
       folderSizeQueueRef.current = [];
       isProcessingFolderSizeRef.current = false;
+      // Abort previous operations
+      if (folderSizeAbortControllerRef.current) {
+        folderSizeAbortControllerRef.current.abort();
+      }
     }
+
+    // Create new abort controller for this path
+    const abortController = new AbortController();
+    folderSizeAbortControllerRef.current = abortController;
+    const signal = abortController.signal;
+
+    // Helper to check if we should still update state
+    const isStillValid = () => !signal.aborted && activeTabIdRef.current === tabIdAtStart;
+
     files.forEach((file) => {
       if (file.isDirectory && !folderSizes.has(file.path) && !loadingFolderSizes.has(file.path)) {
         const cachedEntry = getCachedSize(file.path);
@@ -352,6 +378,11 @@ export const FileList: React.FC<FileListProps> = ({ onOpen }) => {
       if (isProcessingFolderSizeRef.current || folderSizeQueueRef.current.length === 0) return;
       isProcessingFolderSizeRef.current = true;
       while (folderSizeQueueRef.current.length > 0) {
+        // Check if aborted or tab changed
+        if (!isStillValid()) {
+          isProcessingFolderSizeRef.current = false;
+          return;
+        }
         const folderPath = folderSizeQueueRef.current.shift()!;
         if (currentPath !== currentPathRef.current) {
           isProcessingFolderSizeRef.current = false;
@@ -362,7 +393,12 @@ export const FileList: React.FC<FileListProps> = ({ onOpen }) => {
         setLoadingFolderSize(folderPath, true);
         try {
           const response = await window.xplorer.request('fs.folderSize', { path: folderPath });
-          if (response.success && response.data && typeof (response.data as any).size === 'number') {
+          // Check if aborted or tab changed before applying result
+          if (!isStillValid()) {
+            isProcessingFolderSizeRef.current = false;
+            return;
+          }
+          if (response.success && response.data && typeof (response.data as any).size === 'number' && !(response.data as any).cancelled) {
             const size = (response.data as any).size;
             setFolderSize(folderPath, size);
             setCachedSize(folderPath, size, folderInfo.modifiedAt);
@@ -370,12 +406,18 @@ export const FileList: React.FC<FileListProps> = ({ onOpen }) => {
             setLoadingFolderSize(folderPath, false);
           }
         } catch {
-          setLoadingFolderSize(folderPath, false);
+          if (isStillValid()) {
+            setLoadingFolderSize(folderPath, false);
+          }
         }
       }
       isProcessingFolderSizeRef.current = false;
     };
     processQueue();
+
+    return () => {
+      abortController.abort();
+    };
   }, [files, measureFolderSize, folderSizes, loadingFolderSizes, setFolderSize, setLoadingFolderSize, currentPath, getCachedSize, setCachedSize, isCacheValid]);
 
   // Clear folder sizes when path changes
@@ -531,7 +573,10 @@ export const FileList: React.FC<FileListProps> = ({ onOpen }) => {
         case 'open-file-location':
           if (files.length === 1) {
             const parentPath = files[0].path.substring(0, files[0].path.lastIndexOf('\\'));
-            tabActions.navigateTo(parentPath);
+            const tabId = activeTabIdRef.current;
+            if (tabId) {
+              tabActions.navigateTab(tabId, parentPath);
+            }
           }
           break;
         case 'add-quick-access':
@@ -733,9 +778,16 @@ export const FileList: React.FC<FileListProps> = ({ onOpen }) => {
       filesToDrag = [file];
     }
     const paths = filesToDrag.map((f) => f.path);
+
+    // Set data for internal drops
     e.dataTransfer.effectAllowed = 'copyMove';
     e.dataTransfer.setData('application/x-xplorer-files', JSON.stringify(paths));
-    e.dataTransfer.setData('text/plain', paths.join('\n'));
+
+    // For external apps, use the file:// protocol URIs (text/uri-list format)
+    const fileUris = paths.map(p => `file:///${p.replace(/\\/g, '/')}`).join('\r\n');
+    e.dataTransfer.setData('text/uri-list', fileUris);
+    e.dataTransfer.setData('text/plain', paths.join('\r\n'));
+
     if (filesToDrag.length > 1) {
       const dragImage = document.createElement('div');
       dragImage.style.cssText = 'position: absolute; top: -1000px; padding: 8px 12px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 4px; font-size: 12px; color: var(--text-primary);';
@@ -744,6 +796,8 @@ export const FileList: React.FC<FileListProps> = ({ onOpen }) => {
       e.dataTransfer.setDragImage(dragImage, 0, 0);
       setTimeout(() => document.body.removeChild(dragImage), 0);
     }
+
+    // Trigger native drag for external app compatibility
     window.xplorer.startDrag(paths);
   }, [selectedIds, getSelectedFiles, select]);
 

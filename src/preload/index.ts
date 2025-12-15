@@ -94,8 +94,14 @@ contextBridge.exposeInMainWorld('xplorer', {
     close: (id: string): void => ipcRenderer.send('tabs:close', id),
     setActive: (id: string): void => ipcRenderer.send('tabs:setActive', id),
     navigateTo: (path: string): void => ipcRenderer.send('tabs:navigateTo', path),
+    // Navigate a specific tab by ID (tab-safe navigation)
+    navigateTab: (tabId: string, path: string): void => ipcRenderer.send('tabs:navigateTab', tabId, path),
     goBack: (): void => ipcRenderer.send('tabs:goBack'),
+    // Go back in a specific tab's history (tab-safe navigation)
+    goBackTab: (tabId: string): void => ipcRenderer.send('tabs:goBackTab', tabId),
     goForward: (): void => ipcRenderer.send('tabs:goForward'),
+    // Go forward in a specific tab's history (tab-safe navigation)
+    goForwardTab: (tabId: string): void => ipcRenderer.send('tabs:goForwardTab', tabId),
     // Tab transfer methods (for inter-window drag and drop)
     addTab: (tab: TabData): void => ipcRenderer.send('tabs:addTab', tab),
     removeTab: (id: string): void => ipcRenderer.send('tabs:removeTab', id),
@@ -200,8 +206,11 @@ declare global {
         close: (id: string) => void;
         setActive: (id: string) => void;
         navigateTo: (path: string) => void;
+        navigateTab: (tabId: string, path: string) => void;
         goBack: () => void;
+        goBackTab: (tabId: string) => void;
         goForward: () => void;
+        goForwardTab: (tabId: string) => void;
         addTab: (tab: TabData) => void;
         removeTab: (id: string) => void;
         transferTab: (tabId: string, targetWindowId: string) => void;
